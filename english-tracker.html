@@ -1,0 +1,1970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>English Tracker</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1117;
+  --surface: #181c27;
+  --surface2: #1f2436;
+  --border: #2a3044;
+  --border2: #353d55;
+  --text: #e8eaf0;
+  --text2: #8b92a8;
+  --text3: #555e7a;
+  --teal: #2dd4bf;
+  --teal-dim: #1a4a45;
+  --gold: #fbbf24;
+  --gold-dim: #3d2f0a;
+  --rust: #f87171;
+  --rust-dim: #3d1515;
+  --blue: #60a5fa;
+  --blue-dim: #1a2a4a;
+  --green: #4ade80;
+  --green-dim: #0f3020;
+  --purple: #a78bfa;
+  --purple-dim: #251a4a;
+}
+
+body {
+  font-family: 'Instrument Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── LAYOUT ── */
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.sidebar-logo {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo-name {
+  font-family: 'Fraunces', serif;
+  font-size: 18px;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.logo-sub {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--text3);
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-section {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 10px 10px 4px;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--text2);
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.nav-btn:hover { background: var(--surface2); color: var(--text); }
+.nav-btn.active { background: var(--blue-dim); color: var(--blue); }
+
+.nav-icon { font-size: 15px; width: 18px; text-align: center; }
+
+.sidebar-footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.sync-status {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  flex-shrink: 0;
+}
+
+.sync-dot.syncing { background: var(--gold); box-shadow: 0 0 6px var(--gold); animation: pulse 1s infinite; }
+.sync-dot.error { background: var(--rust); box-shadow: 0 0 6px var(--rust); }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── MAIN ── */
+.main {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.topbar-title {
+  font-family: 'Fraunces', serif;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.topbar-actions { margin-left: auto; display: flex; gap: 8px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  color: var(--text2);
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn:hover { border-color: var(--blue); color: var(--blue); }
+
+.btn-primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #0f1117;
+  font-weight: 600;
+}
+
+.btn-primary:hover { background: #93c5fd; border-color: #93c5fd; color: #0f1117; }
+
+.content { padding: 24px 28px; flex: 1; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.card-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-title {
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+/* ── DASHBOARD ── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+}
+
+.stat-card.c-blue::before { background: var(--blue); }
+.stat-card.c-teal::before { background: var(--teal); }
+.stat-card.c-gold::before { background: var(--gold); }
+.stat-card.c-green::before { background: var(--green); }
+
+.stat-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-family: 'Fraunces', serif;
+  font-size: 32px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-card.c-blue .stat-value { color: var(--blue); }
+.stat-card.c-teal .stat-value { color: var(--teal); }
+.stat-card.c-gold .stat-value { color: var(--gold); }
+.stat-card.c-green .stat-value { color: var(--green); }
+
+.stat-sub { font-size: 11px; color: var(--text3); }
+
+/* ── STUDENT LIST ── */
+.student-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.student-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.student-card:hover {
+  border-color: var(--blue);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(96,165,250,0.1);
+}
+
+.sc-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+
+.sc-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.sc-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.sc-year { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text3); }
+
+.sc-bars { display: flex; flex-direction: column; gap: 5px; }
+
+.sc-bar-row { display: flex; align-items: center; gap: 8px; }
+.sc-bar-label { font-size: 10px; color: var(--text3); width: 52px; flex-shrink: 0; }
+.sc-bar-track { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.sc-bar-fill { height: 100%; border-radius: 2px; }
+.sc-bar-pct { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text3); width: 26px; text-align: right; }
+
+/* ── STUDENT DETAIL ── */
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.detail-avatar {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif;
+  font-size: 22px;
+}
+
+.detail-name {
+  font-family: 'Fraunces', serif;
+  font-size: 24px;
+  font-weight: 400;
+  margin-bottom: 3px;
+}
+
+.detail-meta { font-size: 12px; color: var(--text3); }
+
+.detail-actions { margin-left: auto; display: flex; gap: 8px; }
+
+.mastery-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.mastery-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  background: none;
+  color: var(--text3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mastery-tab:hover { border-color: var(--text2); color: var(--text2); }
+.mastery-tab.active { border-color: currentColor; }
+.mastery-tab.t-all.active { color: var(--blue); border-color: var(--blue); background: var(--blue-dim); }
+.mastery-tab.t-achieved.active { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+.mastery-tab.t-developing.active { color: var(--gold); border-color: var(--gold); background: var(--gold-dim); }
+.mastery-tab.t-emerging.active { color: var(--rust); border-color: var(--rust); background: var(--rust-dim); }
+.mastery-tab.t-nottaught.active { color: var(--text2); border-color: var(--text2); background: var(--surface2); }
+
+.tab-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+
+/* ── CURRICULUM CODES TABLE ── */
+.codes-table { width: 100%; border-collapse: collapse; }
+
+.codes-table th {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+.codes-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  vertical-align: middle;
+}
+
+.codes-table tr:last-child td { border-bottom: none; }
+
+.codes-table tr:hover td { background: var(--surface2); }
+
+.code-pill {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.mastery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.mb-achieved { background: var(--green-dim); color: var(--green); border-color: var(--green-dim); }
+.mb-developing { background: var(--gold-dim); color: var(--gold); border-color: var(--gold-dim); }
+.mb-emerging { background: var(--rust-dim); color: var(--rust); border-color: var(--rust-dim); }
+.mb-nottaught { background: var(--surface2); color: var(--text3); border-color: var(--border); }
+.mastery-badge:hover { filter: brightness(1.2); }
+
+.aspect-tag {
+  font-size: 11px;
+  color: var(--text3);
+  background: var(--surface2);
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* ── MODAL ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  width: 460px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp { from{transform:translateY(12px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+.modal-head {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-family: 'Fraunces', serif;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.modal-close:hover { color: var(--text); }
+
+.modal-body { padding: 20px 22px; }
+.modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── FORM ── */
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 6px;
+}
+
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  border-color: var(--blue);
+}
+
+.form-select option { background: var(--surface2); }
+.form-textarea { resize: vertical; min-height: 80px; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* ── MASTERY PICKER ── */
+.mastery-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.mp-option {
+  padding: 8px 4px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: none;
+  color: var(--text3);
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mp-option:hover { border-color: var(--text2); }
+.mp-option.selected-achieved { background: var(--green-dim); color: var(--green); border-color: var(--green); }
+.mp-option.selected-developing { background: var(--gold-dim); color: var(--gold); border-color: var(--gold); }
+.mp-option.selected-emerging { background: var(--rust-dim); color: var(--rust); border-color: var(--rust); }
+.mp-option.selected-nottaught { background: var(--surface2); color: var(--text2); border-color: var(--text2); }
+
+/* ── LOADING ── */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  gap: 14px;
+  color: var(--text3);
+}
+
+.spinner {
+  width: 28px; height: 28px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  gap: 12px;
+  color: var(--text3);
+  text-align: center;
+}
+
+.empty-icon { font-size: 36px; opacity: 0.4; }
+.empty-title { font-family: 'Fraunces', serif; font-size: 18px; color: var(--text2); }
+.empty-sub { font-size: 13px; max-width: 280px; line-height: 1.5; }
+
+/* ── SEARCH ── */
+.search-wrap { position: relative; }
+.search-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 12px 7px 32px;
+  color: var(--text);
+  font-size: 13px;
+  width: 220px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.search-input:focus { border-color: var(--blue); }
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text3);
+  font-size: 13px;
+}
+
+/* ── TOAST ── */
+.toast-wrap {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 200;
+}
+
+.toast {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideLeft 0.2s ease;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+@keyframes slideLeft { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+.toast.success { border-color: var(--green); }
+.toast.error { border-color: var(--rust); }
+
+/* ── LITERACY PROGRESSION PANEL ── */
+.progression-panel {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+
+.pp-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+
+.pp-item {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.4;
+}
+
+.pp-item:last-child { border-bottom: none; }
+
+.pp-level {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--purple);
+  background: var(--purple-dim);
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  height: fit-content;
+  margin-top: 1px;
+}
+
+/* Avatar colours */
+.av-0 { background: #1a2a4a; color: var(--blue); }
+.av-1 { background: #1a4a45; color: var(--teal); }
+.av-2 { background: #3d2f0a; color: var(--gold); }
+.av-3 { background: #251a4a; color: var(--purple); }
+.av-4 { background: #0f3020; color: var(--green); }
+.av-5 { background: #3d1515; color: var(--rust); }
+
+.bar-blue { background: var(--blue); }
+.bar-teal { background: var(--teal); }
+.bar-gold { background: var(--gold); }
+.bar-green { background: var(--green); }
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-name">ClassTracker</div>
+      <div class="logo-sub">English · P–6</div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Views</div>
+      <button class="nav-btn active" onclick="showView('dashboard')" id="nav-dashboard">
+        <span class="nav-icon">◈</span> Dashboard
+      </button>
+      <button class="nav-btn" onclick="showView('students')" id="nav-students">
+        <span class="nav-icon">◎</span> Students
+      </button>
+      <div class="nav-section">Browse Data</div>
+      <button class="nav-btn" onclick="showView('curriculum')" id="nav-curriculum">
+        <span class="nav-icon">≡</span> Curriculum Codes
+      </button>
+      <button class="nav-btn" onclick="showView('standards')" id="nav-standards">
+        <span class="nav-icon">◇</span> Standards
+      </button>
+      <button class="nav-btn" onclick="showView('progressions')" id="nav-progressions">
+        <span class="nav-icon">⟡</span> Lit Progressions
+      </button>
+      <div class="nav-section">Load CSV Files</div>
+      <label class="nav-btn" style="cursor:pointer" id="nav-load-cd">
+        <span class="nav-icon" id="icon-cd">○</span>
+        <span>Content Descriptors</span>
+        <input type="file" accept=".csv" style="display:none" onchange="loadCurriculumCSV(this)">
+      </label>
+      <label class="nav-btn" style="cursor:pointer" id="nav-load-st">
+        <span class="nav-icon" id="icon-st">○</span>
+        <span>Standards</span>
+        <input type="file" accept=".csv" style="display:none" onchange="loadStandardsCSV(this)">
+      </label>
+      <label class="nav-btn" style="cursor:pointer" id="nav-load-pr">
+        <span class="nav-icon" id="icon-pr">○</span>
+        <span>Progressions</span>
+        <input type="file" accept=".csv" style="display:none" onchange="loadProgressionsCSV(this)">
+      </label>
+      <label class="nav-btn" style="cursor:pointer" id="nav-load-lk">
+        <span class="nav-icon" id="icon-lk">○</span>
+        <span>Aspect Links</span>
+        <input type="file" accept=".csv" style="display:none" onchange="loadLinksCSV(this)">
+      </label>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sync-status">
+        <div class="sync-dot" id="sync-dot"></div>
+        <span id="sync-label">Connected</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main" id="main-content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>Loading your data…</div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ── CONFIG ──
+const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
+
+// ── STATE ──
+let state = {
+  students: [],
+  progress: [],
+  curriculumCodes: [],
+  standards: [],
+  progressions: [],
+  aspectLinks: [],
+  currentView: 'dashboard',
+  selectedStudent: null,
+  loading: true,
+  syncing: false
+};
+
+// ── EMBEDDED DATA (from your CSVs) ──
+// These are parsed from your actual CSV files
+const CURRICULUM_DATA = [
+  // Format: [code, aspect, linkedAspectIds]
+  // Sample from EnglishContentDescriptors - will be populated from CSV
+];
+
+const STANDARDS_DATA = [
+  // Format: [aspectId, year, aspect, code]
+  // Sample from EnglishAchievementStandardAspects - will be populated from CSV
+];
+
+// ── GOOGLE SHEETS API ──
+async function apiCall(action, data = null) {
+  setSyncing(true);
+  try {
+    const opts = data
+      ? { method: 'POST', body: JSON.stringify({ action, ...data }) }
+      : { method: 'GET' };
+
+    const url = data
+      ? API_URL + '?action=' + action
+      : API_URL + '?action=' + action;
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action, ...(data || {}) })
+    });
+
+    const result = await resp.json();
+    setSyncing(false);
+    return result;
+  } catch (err) {
+    setSyncing(false);
+    setError();
+    throw err;
+  }
+}
+
+async function loadStudents() {
+  try {
+    const rows = await apiCall('getStudents');
+    if (Array.isArray(rows) && rows.length > 1) {
+      state.students = rows.slice(1).map(r => ({
+        id: r[0], first_name: r[1], last_name: r[2],
+        year_level: r[3], date_added: r[4]
+      })).filter(s => s.id);
+    }
+  } catch(e) { console.error('Load students error:', e); }
+}
+
+async function loadProgress() {
+  try {
+    const rows = await apiCall('getProgress');
+    if (Array.isArray(rows) && rows.length > 1) {
+      state.progress = rows.slice(1).map(r => ({
+        id: r[0], student_id: r[1], code: r[2],
+        mastery: r[3], date: r[4], notes: r[5], evidence: r[6]
+      })).filter(p => p.id);
+    }
+  } catch(e) { console.error('Load progress error:', e); }
+}
+
+async function addStudent(data) {
+  const result = await apiCall('addStudent', data);
+  if (result.success) {
+    state.students.push({
+      id: result.student_id,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      year_level: data.year_level,
+      date_added: new Date().toISOString()
+    });
+    toast('Student added successfully', 'success');
+    renderView();
+  }
+  return result;
+}
+
+async function saveProgress(data) {
+  // Check for existing progress entry
+  const existing = state.progress.find(
+    p => p.student_id === data.student_id && p.code === data.content_descriptor_code
+  );
+
+  if (existing) {
+    const result = await apiCall('updateProgress', {
+      progress_id: existing.id,
+      mastery_level: data.mastery_level,
+      date_assessed: data.date_assessed,
+      teacher_notes: data.teacher_notes
+    });
+    if (result.success) {
+      existing.mastery = data.mastery_level;
+      existing.date = data.date_assessed;
+      existing.notes = data.teacher_notes;
+      toast('Progress updated', 'success');
+    }
+  } else {
+    const result = await apiCall('saveProgress', data);
+    if (result.success) {
+      state.progress.push({
+        id: result.progress_id,
+        student_id: data.student_id,
+        code: data.content_descriptor_code,
+        mastery: data.mastery_level,
+        date: data.date_assessed,
+        notes: data.teacher_notes
+      });
+      toast('Progress saved', 'success');
+    }
+  }
+  renderView();
+}
+
+// ── SYNC STATE UI ──
+function setSyncing(v) {
+  state.syncing = v;
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  if (v) {
+    dot.className = 'sync-dot syncing';
+    label.textContent = 'Syncing…';
+  } else {
+    dot.className = 'sync-dot';
+    label.textContent = 'Connected';
+  }
+}
+
+function setError() {
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  dot.className = 'sync-dot error';
+  label.textContent = 'Sync error';
+}
+
+// ── TOAST ──
+function toast(msg, type = 'success') {
+  const wrap = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${type === 'success' ? '✓' : '✗'}</span> ${msg}`;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ── HELPERS ──
+function getInitials(s) {
+  return ((s.first_name || '')[0] + (s.last_name || '')[0]).toUpperCase();
+}
+
+function getAvClass(i) {
+  return 'av-' + (i % 6);
+}
+
+function getStudentProgress(studentId) {
+  return state.progress.filter(p => p.student_id === studentId);
+}
+
+function getMasteryForCode(studentId, code) {
+  const p = state.progress.find(x => x.student_id === studentId && x.code === code);
+  return p ? p.mastery : 'Not taught';
+}
+
+function masteryClass(m) {
+  if (!m || m === 'Not taught') return 'mb-nottaught';
+  return 'mb-' + m.toLowerCase().replace(' ', '');
+}
+
+function masteryDot(m) {
+  if (m === 'Achieved') return '●';
+  if (m === 'Developing') return '◐';
+  if (m === 'Emerging') return '○';
+  return '·';
+}
+
+function getProgressStats(studentId) {
+  const prog = getStudentProgress(studentId);
+  const achieved = prog.filter(p => p.mastery === 'Achieved').length;
+  const developing = prog.filter(p => p.mastery === 'Developing').length;
+  const emerging = prog.filter(p => p.mastery === 'Emerging').length;
+  const total = state.curriculumCodes.length || 1;
+  return { achieved, developing, emerging, total,
+    pct: Math.round((achieved / total) * 100) };
+}
+
+// ── PARSE CSV DATA ──
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = parseCSVLine(lines[0]);
+  return lines.slice(1).map(line => {
+    const vals = parseCSVLine(line);
+    const obj = {};
+    headers.forEach((h, i) => obj[h.trim()] = (vals[i] || '').trim());
+    return obj;
+  });
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur);
+  return result;
+}
+
+// ── VIEWS ──
+function showView(v) {
+  state.currentView = v;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const nb = document.getElementById('nav-' + v);
+  if (nb) nb.classList.add('active');
+  renderView();
+}
+
+function renderView() {
+  const main = document.getElementById('main-content');
+  switch(state.currentView) {
+    case 'dashboard': renderDashboard(main); break;
+    case 'students': renderStudents(main); break;
+    case 'student-detail': renderStudentDetail(main); break;
+    case 'curriculum': renderCurriculum(main); break;
+    case 'standards': renderStandards(main); break;
+    case 'progressions': renderProgressions(main); break;
+    default: renderDashboard(main);
+  }
+}
+
+// ── DASHBOARD ──
+function renderDashboard(main) {
+  const totalStudents = state.students.length;
+  const totalProgress = state.progress.length;
+  const achieved = state.progress.filter(p => p.mastery === 'Achieved').length;
+  const gaps = state.progress.filter(p => p.mastery === 'Emerging').length;
+
+  // Recent activity
+  const recent = [...state.progress]
+    .sort((a,b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 5);
+
+  main.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-title">Dashboard</div>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="openAddStudentModal()">+ Add Student</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="stats-row">
+        <div class="stat-card c-blue">
+          <div class="stat-label">Students</div>
+          <div class="stat-value">${totalStudents}</div>
+          <div class="stat-sub">enrolled</div>
+        </div>
+        <div class="stat-card c-teal">
+          <div class="stat-label">Assessments</div>
+          <div class="stat-value">${totalProgress}</div>
+          <div class="stat-sub">recorded</div>
+        </div>
+        <div class="stat-card c-green">
+          <div class="stat-label">Achieved</div>
+          <div class="stat-value">${achieved}</div>
+          <div class="stat-sub">outcomes met</div>
+        </div>
+        <div class="stat-card c-gold">
+          <div class="stat-label">Gaps</div>
+          <div class="stat-value">${gaps}</div>
+          <div class="stat-sub">emerging / at risk</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Students</div>
+            <button class="btn" onclick="showView('students')">View all →</button>
+          </div>
+          <div style="padding:8px 0;">
+            ${totalStudents === 0
+              ? `<div class="empty-state" style="padding:30px">
+                  <div class="empty-icon">◎</div>
+                  <div class="empty-title">No students yet</div>
+                  <div class="empty-sub">Add your first student to get started</div>
+                  <button class="btn btn-primary" style="margin-top:8px" onclick="openAddStudentModal()">+ Add Student</button>
+                </div>`
+              : state.students.slice(0,5).map((s,i) => {
+                  const stats = getProgressStats(s.id);
+                  return `<div style="display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--border);cursor:pointer" onclick="openStudentDetail('${s.id}')">
+                    <div class="sc-avatar ${getAvClass(i)}" style="width:32px;height:32px;font-size:13px">${getInitials(s)}</div>
+                    <div style="flex:1">
+                      <div style="font-size:13px;font-weight:600">${s.first_name} ${s.last_name}</div>
+                      <div style="font-size:10px;color:var(--text3)">Year ${s.year_level}</div>
+                    </div>
+                    <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green)">${stats.pct}%</div>
+                  </div>`;
+                }).join('')
+            }
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Recent Assessments</div>
+          </div>
+          <div style="padding:8px 0;">
+            ${recent.length === 0
+              ? `<div class="empty-state" style="padding:30px">
+                  <div class="empty-icon">◈</div>
+                  <div class="empty-title">No assessments yet</div>
+                  <div class="empty-sub">Open a student profile to record progress</div>
+                </div>`
+              : recent.map(p => {
+                  const student = state.students.find(s => s.id === p.student_id);
+                  const name = student ? `${student.first_name} ${student.last_name}` : 'Unknown';
+                  return `<div style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border)">
+                    <div style="flex:1">
+                      <div style="font-size:12px;font-weight:600">${name}</div>
+                      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${p.code}</div>
+                    </div>
+                    <div class="mastery-badge ${masteryClass(p.mastery)}">${masteryDot(p.mastery)} ${p.mastery}</div>
+                  </div>`;
+                }).join('')
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── STUDENTS LIST ──
+function renderStudents(main) {
+  main.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-title">Students</div>
+      <div class="topbar-actions">
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input class="search-input" placeholder="Search students…" oninput="filterStudents(this.value)" id="student-search">
+        </div>
+        <button class="btn btn-primary" onclick="openAddStudentModal()">+ Add Student</button>
+      </div>
+    </div>
+    <div class="content">
+      ${state.students.length === 0
+        ? `<div class="empty-state" style="padding:80px">
+            <div class="empty-icon">◎</div>
+            <div class="empty-title">No students yet</div>
+            <div class="empty-sub">Add your first student to start tracking progress against curriculum codes.</div>
+            <button class="btn btn-primary" style="margin-top:12px" onclick="openAddStudentModal()">+ Add Student</button>
+          </div>`
+        : `<div class="student-grid" id="student-grid">
+            ${renderStudentCards(state.students)}
+          </div>`
+      }
+    </div>
+  `;
+}
+
+function renderStudentCards(students) {
+  return students.map((s, i) => {
+    const stats = getProgressStats(s.id);
+    return `
+      <div class="student-card" onclick="openStudentDetail('${s.id}')">
+        <div class="sc-top">
+          <div class="sc-avatar ${getAvClass(i)}">${getInitials(s)}</div>
+          <div>
+            <div class="sc-name">${s.first_name} ${s.last_name}</div>
+            <div class="sc-year">Year ${s.year_level}</div>
+          </div>
+        </div>
+        <div class="sc-bars">
+          <div class="sc-bar-row">
+            <div class="sc-bar-label">Achieved</div>
+            <div class="sc-bar-track"><div class="sc-bar-fill bar-green" style="width:${stats.total ? Math.round(stats.achieved/stats.total*100) : 0}%"></div></div>
+            <div class="sc-bar-pct">${stats.achieved}</div>
+          </div>
+          <div class="sc-bar-row">
+            <div class="sc-bar-label">Developing</div>
+            <div class="sc-bar-track"><div class="sc-bar-fill bar-gold" style="width:${stats.total ? Math.round(stats.developing/stats.total*100) : 0}%"></div></div>
+            <div class="sc-bar-pct">${stats.developing}</div>
+          </div>
+          <div class="sc-bar-row">
+            <div class="sc-bar-label">Emerging</div>
+            <div class="sc-bar-track"><div class="sc-bar-fill" style="width:${stats.total ? Math.round(stats.emerging/stats.total*100) : 0}%;background:var(--rust)"></div></div>
+            <div class="sc-bar-pct">${stats.emerging}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterStudents(q) {
+  const grid = document.getElementById('student-grid');
+  if (!grid) return;
+  const filtered = state.students.filter(s =>
+    `${s.first_name} ${s.last_name}`.toLowerCase().includes(q.toLowerCase())
+  );
+  grid.innerHTML = renderStudentCards(filtered);
+}
+
+// ── STUDENT DETAIL ──
+function openStudentDetail(studentId) {
+  state.selectedStudent = studentId;
+  state.currentView = 'student-detail';
+  state.detailFilter = 'all';
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  renderView();
+}
+
+function renderStudentDetail(main) {
+  const s = state.students.find(x => x.id === state.selectedStudent);
+  if (!s) { showView('students'); return; }
+
+  const si = state.students.indexOf(s);
+  const filter = state.detailFilter || 'all';
+
+  let codes = state.curriculumCodes.filter(c => {
+    if (s.year_level) {
+      // Show codes relevant to year level if possible
+    }
+    return true;
+  });
+
+  const filteredCodes = codes.filter(c => {
+    const mastery = getMasteryForCode(s.id, c.Code);
+    if (filter === 'all') return true;
+    if (filter === 'achieved') return mastery === 'Achieved';
+    if (filter === 'developing') return mastery === 'Developing';
+    if (filter === 'emerging') return mastery === 'Emerging';
+    if (filter === 'nottaught') return mastery === 'Not taught';
+    return true;
+  });
+
+  const stats = {
+    achieved: codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Achieved').length,
+    developing: codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Developing').length,
+    emerging: codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Emerging').length,
+    nottaught: codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Not taught').length,
+  };
+
+  main.innerHTML = `
+    <div class="detail-header">
+      <button class="btn" onclick="showView('students')" style="margin-right:4px">← Back</button>
+      <div class="detail-avatar ${getAvClass(si)}">${getInitials(s)}</div>
+      <div>
+        <div class="detail-name">${s.first_name} ${s.last_name}</div>
+        <div class="detail-meta">Year ${s.year_level} · ${codes.length} curriculum codes</div>
+      </div>
+      <div class="detail-actions">
+        <button class="btn btn-primary" onclick="openBulkAssess('${s.id}')">+ Record Assessment</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="mastery-tabs">
+        <button class="mastery-tab t-all ${filter==='all'?'active':''}" onclick="setDetailFilter('all')">
+          All <span class="tab-count">${codes.length}</span>
+        </button>
+        <button class="mastery-tab t-achieved ${filter==='achieved'?'active':''}" onclick="setDetailFilter('achieved')">
+          ● Achieved <span class="tab-count">${stats.achieved}</span>
+        </button>
+        <button class="mastery-tab t-developing ${filter==='developing'?'active':''}" onclick="setDetailFilter('developing')">
+          ◐ Developing <span class="tab-count">${stats.developing}</span>
+        </button>
+        <button class="mastery-tab t-emerging ${filter==='emerging'?'active':''}" onclick="setDetailFilter('emerging')">
+          ○ Emerging <span class="tab-count">${stats.emerging}</span>
+        </button>
+        <button class="mastery-tab t-nottaught ${filter==='nottaught'?'active':''}" onclick="setDetailFilter('nottaught')">
+          · Not taught <span class="tab-count">${stats.nottaught}</span>
+        </button>
+      </div>
+
+      <div class="card">
+        ${filteredCodes.length === 0
+          ? `<div class="empty-state" style="padding:40px">
+              <div class="empty-icon">◈</div>
+              <div class="empty-title">No codes in this filter</div>
+            </div>`
+          : `<table class="codes-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Learning Outcome</th>
+                  <th>Aspect</th>
+                  <th>Mastery</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${filteredCodes.map(c => {
+                  const mastery = getMasteryForCode(s.id, c.Code);
+                  const prog = state.progress.find(p => p.student_id === s.id && p.code === c.Code);
+                  const date = prog ? prog.date.split('T')[0] : '—';
+                  return `<tr>
+                    <td><span class="code-pill" style="background:var(--surface2);color:var(--blue)">${c.Code}</span></td>
+                    <td style="max-width:300px;color:var(--text2)">${c.Aspect || '—'}</td>
+                    <td><span class="aspect-tag">${c['Linked Aspect IDs'] ? c['Linked Aspect IDs'].split(',')[0] : '—'}</span></td>
+                    <td>
+                      <div class="mastery-badge ${masteryClass(mastery)}" onclick="openMasteryPicker('${s.id}','${c.Code}','${mastery}')">
+                        ${masteryDot(mastery)} ${mastery}
+                      </div>
+                    </td>
+                    <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${date}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>`
+        }
+      </div>
+    </div>
+  `;
+}
+
+function setDetailFilter(f) {
+  state.detailFilter = f;
+  renderView();
+}
+
+// ── CURRICULUM CODES VIEW ──
+function renderCurriculum(main) {
+  const codes = state.curriculumCodes;
+  main.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-title">Curriculum Codes</div>
+      <div class="topbar-actions">
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input class="search-input" placeholder="Search codes…" oninput="filterCodes(this.value)" id="code-search">
+        </div>
+      </div>
+    </div>
+    <div class="content">
+      ${codes.length === 0
+        ? `<div class="empty-state">
+            <div class="empty-icon">≡</div>
+            <div class="empty-title">No curriculum data loaded</div>
+            <div class="empty-sub">Upload your EnglishContentDescriptors CSV using the button below</div>
+            <label class="btn btn-primary" style="margin-top:12px;cursor:pointer">
+              📂 Load CSV
+              <input type="file" accept=".csv" style="display:none" onchange="loadCurriculumCSV(this)">
+            </label>
+          </div>`
+        : `<div class="card">
+            <div class="card-head">
+              <div class="card-title">${codes.length} Curriculum Codes</div>
+              <label class="btn" style="cursor:pointer">
+                ↺ Reload CSV
+                <input type="file" accept=".csv" style="display:none" onchange="loadCurriculumCSV(this)">
+              </label>
+            </div>
+            <table class="codes-table" id="codes-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Aspect / Learning Outcome</th>
+                  <th>Linked Standards</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${codes.map(c => `
+                  <tr>
+                    <td><span class="code-pill" style="background:var(--blue-dim);color:var(--blue)">${c.Code}</span></td>
+                    <td style="color:var(--text2);max-width:400px">${c.Aspect || '—'}</td>
+                    <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c['Linked Aspect IDs'] || '—'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>`
+      }
+    </div>
+  `;
+}
+
+function filterCodes(q) {
+  const tbody = document.querySelector('#codes-table tbody');
+  if (!tbody) return;
+  const filtered = state.curriculumCodes.filter(c =>
+    c.Code.toLowerCase().includes(q.toLowerCase()) ||
+    (c.Aspect || '').toLowerCase().includes(q.toLowerCase())
+  );
+  tbody.innerHTML = filtered.map(c => `
+    <tr>
+      <td><span class="code-pill" style="background:var(--blue-dim);color:var(--blue)">${c.Code}</span></td>
+      <td style="color:var(--text2);max-width:400px">${c.Aspect || '—'}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c['Linked Aspect IDs'] || '—'}</td>
+    </tr>
+  `).join('');
+}
+
+// ── STANDARDS VIEW ──
+function renderStandards(main) {
+  const stds = state.standards;
+  const years = [...new Set(stds.map(s => s.Year))].sort();
+
+  main.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-title">Achievement Standards</div>
+    </div>
+    <div class="content">
+      ${stds.length === 0
+        ? `<div class="empty-state">
+            <div class="empty-icon">◇</div>
+            <div class="empty-title">No standards data loaded</div>
+            <div class="empty-sub">Upload your EnglishAchievementStandardAspects CSV</div>
+            <label class="btn btn-primary" style="margin-top:12px;cursor:pointer">
+              📂 Load CSV
+              <input type="file" accept=".csv" style="display:none" onchange="loadStandardsCSV(this)">
+            </label>
+          </div>`
+        : years.map(year => {
+            const yearStds = stds.filter(s => s.Year === year);
+            return `
+              <div class="card" style="margin-bottom:16px">
+                <div class="card-head">
+                  <div class="card-title">Year ${year}</div>
+                  <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${yearStds.length} aspects</span>
+                </div>
+                <table class="codes-table">
+                  <thead>
+                    <tr><th>Aspect ID</th><th>Aspect</th><th>Code</th></tr>
+                  </thead>
+                  <tbody>
+                    ${yearStds.map(s => `
+                      <tr>
+                        <td><span class="code-pill" style="background:var(--gold-dim);color:var(--gold)">${s['Aspect ID']}</span></td>
+                        <td style="color:var(--text2)">${s.Aspect}</td>
+                        <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${s.Code || '—'}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `;
+          }).join('')
+      }
+    </div>
+  `;
+}
+
+// ── PROGRESSIONS VIEW ──
+function renderProgressions(main) {
+  const progs = state.progressions;
+  const elements = [...new Set(progs.map(p => p.Element))].filter(Boolean);
+  const activeElem = state.progressionFilter || (elements[0] || '');
+
+  main.innerHTML = `
+    <div class="topbar">
+      <div class="topbar-title">Literacy Progressions</div>
+      <div class="topbar-actions">
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input class="search-input" placeholder="Search indicators…" oninput="filterProgressions(this.value)" id="prog-search" style="width:200px">
+        </div>
+      </div>
+    </div>
+    <div class="content">
+      ${progs.length === 0
+        ? `<div class="empty-state">
+            <div class="empty-icon">⟡</div>
+            <div class="empty-title">No progressions data loaded</div>
+            <div class="empty-sub">Use the "Progressions" button in the sidebar to upload your literacy_progressions CSV</div>
+          </div>`
+        : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+            ${elements.map(elem => `
+              <button class="mastery-tab ${activeElem===elem?'active t-all':''}"
+                onclick="setProgressionFilter('${elem.replace(/'/g,"\\'")}')">
+                ${elem}
+              </button>
+            `).join('')}
+          </div>
+          <div id="prog-content">
+            ${renderProgressionContent(progs, activeElem)}
+          </div>`
+      }
+    </div>
+  `;
+}
+
+function renderProgressionContent(progs, activeElem) {
+  const filtered = activeElem ? progs.filter(p => p.Element === activeElem) : progs;
+  const subElements = [...new Set(filtered.map(p => p['Sub-element']))].filter(Boolean);
+
+  return subElements.map(sub => {
+    const items = filtered.filter(p => p['Sub-element'] === sub);
+    const levels = [...new Set(items.map(p => p['Progression level']))].filter(Boolean).sort();
+    return `
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
+          <div class="card-title">${sub}</div>
+          <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${items.length} indicators · ${levels.length} levels</span>
+        </div>
+        <div style="padding:8px 0">
+          ${items.map(item => `
+            <div style="display:flex;gap:10px;padding:8px 18px;border-bottom:1px solid var(--border);align-items:flex-start">
+              <span class="pp-level">L${item['Progression level'] || '?'}</span>
+              <div style="flex:1">
+                <div style="font-size:12px;color:var(--text2);line-height:1.5">${item['Indicator text (no examples)'] || item['Indicator text (verbatim)'] || '—'}</div>
+                ${item['Example / elaboration'] ? `<div style="font-size:11px;color:var(--text3);margin-top:3px;font-style:italic">${item['Example / elaboration']}</div>` : ''}
+                <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">
+                  ${['Foundation','Year 1','Year 2','Year 3','Year 4','Year 5','Year 6'].map(yr => {
+                    const key = 'Relevant – ' + yr;
+                    const val = item[key];
+                    if (!val || val.trim() === '') return '';
+                    return `<span style="font-family:'DM Mono',monospace;font-size:8px;padding:1px 5px;border-radius:3px;background:var(--surface2);color:var(--text3)">${yr}</span>`;
+                  }).join('')}
+                </div>
+              </div>
+              <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);flex-shrink:0">${item['Indicator ID'] || ''}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function setProgressionFilter(elem) {
+  state.progressionFilter = elem;
+  renderView();
+}
+
+function filterProgressions(q) {
+  const content = document.getElementById('prog-content');
+  if (!content) return;
+  if (!q) {
+    content.innerHTML = renderProgressionContent(state.progressions, state.progressionFilter || '');
+    return;
+  }
+  const filtered = state.progressions.filter(p =>
+    (p['Indicator text (no examples)'] || '').toLowerCase().includes(q.toLowerCase()) ||
+    (p['Indicator text (verbatim)'] || '').toLowerCase().includes(q.toLowerCase()) ||
+    (p['Sub-element'] || '').toLowerCase().includes(q.toLowerCase())
+  );
+  content.innerHTML = renderProgressionContent(filtered, '');
+}
+
+// ── CSV LOADERS ──
+function markLoaded(iconId, navId) {
+  const icon = document.getElementById(iconId);
+  const nav = document.getElementById(navId);
+  if (icon) { icon.textContent = '●'; icon.style.color = 'var(--green)'; }
+  if (nav) nav.style.color = 'var(--green)';
+}
+
+function loadCurriculumCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    state.curriculumCodes = parseCSV(e.target.result);
+    toast(`✓ Loaded ${state.curriculumCodes.length} curriculum codes`, 'success');
+    markLoaded('icon-cd', 'nav-load-cd');
+    // Only re-render if we're currently on the curriculum view
+    if (state.currentView === 'curriculum') renderView();
+  };
+  reader.readAsText(file);
+}
+
+function loadStandardsCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    state.standards = parseCSV(e.target.result);
+    toast(`✓ Loaded ${state.standards.length} achievement standards`, 'success');
+    markLoaded('icon-st', 'nav-load-st');
+    if (state.currentView === 'standards') renderView();
+  };
+  reader.readAsText(file);
+}
+
+function loadProgressionsCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    state.progressions = parseCSV(e.target.result);
+    toast(`✓ Loaded ${state.progressions.length} progression indicators`, 'success');
+    markLoaded('icon-pr', 'nav-load-pr');
+    if (state.currentView === 'progressions') renderView();
+  };
+  reader.readAsText(file);
+}
+
+function loadLinksCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    state.aspectLinks = parseCSV(e.target.result);
+    toast(`✓ Loaded ${state.aspectLinks.length} aspect links`, 'success');
+    markLoaded('icon-lk', 'nav-load-lk');
+  };
+  reader.readAsText(file);
+}
+
+// ── LOCAL CACHE (session only — no localStorage) ──
+const sessionCache = {};
+function saveToLocalCache(key, data) { sessionCache[key] = data; }
+function loadFromCache(key) { return sessionCache[key] || null; }
+
+// ── MODALS ──
+function openAddStudentModal() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="width:580px;max-width:95vw">
+      <div class="modal-head">
+        <div class="modal-title">Add Students</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:0">
+
+        <!-- Tabs -->
+        <div style="display:flex;border-bottom:1px solid var(--border)">
+          <button class="modal-tab active" id="tab-csv" onclick="switchModalTab('csv')"
+            style="flex:1;padding:12px;background:none;border:none;color:var(--blue);font-family:'Instrument Sans',sans-serif;font-size:13px;cursor:pointer;border-bottom:2px solid var(--blue);font-weight:600">
+            📂 Upload CSV
+          </button>
+          <button class="modal-tab" id="tab-manual" onclick="switchModalTab('manual')"
+            style="flex:1;padding:12px;background:none;border:none;color:var(--text3);font-family:'Instrument Sans',sans-serif;font-size:13px;cursor:pointer;border-bottom:2px solid transparent">
+            ✏️ Add One Student
+          </button>
+        </div>
+
+        <!-- CSV Tab -->
+        <div id="modal-tab-csv" style="padding:20px 22px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:4px">Upload a CSV file with your class list.</div>
+              <div style="font-size:11px;color:var(--text3)">Columns needed: <span style="font-family:'DM Mono',monospace;color:var(--blue)">first_name, last_name, year_level</span></div>
+            </div>
+            <button class="btn" onclick="downloadStudentTemplate()" style="flex-shrink:0;margin-left:16px">
+              ⬇ Download Template
+            </button>
+          </div>
+
+          <!-- Drop zone -->
+          <div id="csv-dropzone"
+            style="border:2px dashed var(--border2);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:all 0.15s;margin-bottom:14px"
+            onclick="document.getElementById('student-csv-input').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--blue)';this.style.background='var(--blue-dim)'"
+            ondragleave="this.style.borderColor='var(--border2)';this.style.background='none'"
+            ondrop="handleStudentCSVDrop(event)">
+            <div style="font-size:28px;margin-bottom:8px;opacity:0.4">📋</div>
+            <div style="font-size:13px;color:var(--text2);margin-bottom:4px">Drop your CSV here or click to browse</div>
+            <div style="font-size:11px;color:var(--text3)">Accepts .csv files</div>
+            <input type="file" id="student-csv-input" accept=".csv" style="display:none" onchange="handleStudentCSVFile(this)">
+          </div>
+
+          <!-- Preview table -->
+          <div id="csv-preview" style="display:none">
+            <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px" id="csv-preview-label"></div>
+            <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:6px">
+              <table style="width:100%;border-collapse:collapse" id="csv-preview-table"></table>
+            </div>
+            <div id="csv-errors" style="margin-top:8px;font-size:11px;color:var(--rust)"></div>
+          </div>
+        </div>
+
+        <!-- Manual Tab -->
+        <div id="modal-tab-manual" style="padding:20px 22px;display:none">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">First Name</label>
+              <input class="form-input" id="f-firstname" placeholder="e.g. Alex">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Name</label>
+              <input class="form-input" id="f-lastname" placeholder="e.g. Chen">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Year Level</label>
+            <select class="form-select" id="f-year">
+              <option value="">Select year level…</option>
+              <option value="F">Foundation</option>
+              <option value="1">Year 1</option>
+              <option value="2">Year 2</option>
+              <option value="3">Year 3</option>
+              <option value="4">Year 4</option>
+              <option value="5">Year 5</option>
+              <option value="6">Year 6</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="modal-submit-btn" onclick="submitAddStudent()">Add Student</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  state._csvPreviewStudents = [];
+}
+
+function switchModalTab(tab) {
+  const csvTab = document.getElementById('modal-tab-csv');
+  const manualTab = document.getElementById('modal-tab-manual');
+  const csvBtn = document.getElementById('tab-csv');
+  const manualBtn = document.getElementById('tab-manual');
+  const submitBtn = document.getElementById('modal-submit-btn');
+
+  if (tab === 'csv') {
+    csvTab.style.display = 'block';
+    manualTab.style.display = 'none';
+    csvBtn.style.color = 'var(--blue)';
+    csvBtn.style.borderBottom = '2px solid var(--blue)';
+    manualBtn.style.color = 'var(--text3)';
+    manualBtn.style.borderBottom = '2px solid transparent';
+    submitBtn.textContent = 'Import Students';
+    submitBtn.onclick = submitCSVImport;
+  } else {
+    csvTab.style.display = 'none';
+    manualTab.style.display = 'block';
+    csvBtn.style.color = 'var(--text3)';
+    csvBtn.style.borderBottom = '2px solid transparent';
+    manualBtn.style.color = 'var(--blue)';
+    manualBtn.style.borderBottom = '2px solid var(--blue)';
+    submitBtn.textContent = 'Add Student';
+    submitBtn.onclick = submitAddStudent;
+    document.getElementById('f-firstname').focus();
+  }
+}
+
+function downloadStudentTemplate() {
+  const csv = [
+    'first_name,last_name,year_level',
+    'Alex,Chen,3',
+    'Jamie,Smith,3',
+    'Riley,Johnson,4',
+    'Morgan,Williams,2',
+  ].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'students_template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Template downloaded', 'success');
+}
+
+function handleStudentCSVDrop(event) {
+  event.preventDefault();
+  const dz = document.getElementById('csv-dropzone');
+  dz.style.borderColor = 'var(--border2)';
+  dz.style.background = 'none';
+  const file = event.dataTransfer.files[0];
+  if (file && file.name.endsWith('.csv')) {
+    processStudentCSV(file);
+  } else {
+    toast('Please drop a .csv file', 'error');
+  }
+}
+
+function handleStudentCSVFile(input) {
+  const file = input.files[0];
+  if (file) processStudentCSV(file);
+}
+
+function processStudentCSV(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const rows = parseCSV(e.target.result);
+    const errors = [];
+    const valid = [];
+    const yearOptions = ['F','1','2','3','4','5','6'];
+
+    rows.forEach((row, i) => {
+      const first = (row['first_name'] || row['First Name'] || row['firstname'] || '').trim();
+      const last = (row['last_name'] || row['Last Name'] || row['lastname'] || row['surname'] || '').trim();
+      const year = (row['year_level'] || row['Year Level'] || row['year'] || row['Year'] || '').trim();
+
+      if (!first) { errors.push(`Row ${i+2}: missing first_name`); return; }
+      if (!last) { errors.push(`Row ${i+2}: missing last_name`); return; }
+      if (!year) { errors.push(`Row ${i+2}: missing year_level`); return; }
+      if (!yearOptions.includes(year)) { errors.push(`Row ${i+2}: year_level "${year}" must be F, 1, 2, 3, 4, 5, or 6`); return; }
+
+      // Check for duplicates against existing students
+      const exists = state.students.find(s =>
+        s.first_name.toLowerCase() === first.toLowerCase() &&
+        s.last_name.toLowerCase() === last.toLowerCase()
+      );
+      if (exists) { errors.push(`Row ${i+2}: ${first} ${last} already exists — skipping`); return; }
+
+      valid.push({ first_name: first, last_name: last, year_level: year });
+    });
+
+    state._csvPreviewStudents = valid;
+
+    // Show preview
+    const preview = document.getElementById('csv-preview');
+    const label = document.getElementById('csv-preview-label');
+    const table = document.getElementById('csv-preview-table');
+    const errDiv = document.getElementById('csv-errors');
+    const submitBtn = document.getElementById('modal-submit-btn');
+
+    preview.style.display = 'block';
+    label.textContent = `${valid.length} student${valid.length !== 1 ? 's' : ''} ready to import${errors.length ? ` · ${errors.length} skipped` : ''}`;
+
+    table.innerHTML = `
+      <thead>
+        <tr style="background:var(--surface2)">
+          <th style="padding:7px 12px;text-align:left;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;color:var(--text3);text-transform:uppercase">First Name</th>
+          <th style="padding:7px 12px;text-align:left;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;color:var(--text3);text-transform:uppercase">Last Name</th>
+          <th style="padding:7px 12px;text-align:left;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;color:var(--text3);text-transform:uppercase">Year</th>
+          <th style="padding:7px 12px;text-align:left;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;color:var(--text3);text-transform:uppercase">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${valid.map(s => `
+          <tr style="border-top:1px solid var(--border)">
+            <td style="padding:7px 12px;font-size:12px">${s.first_name}</td>
+            <td style="padding:7px 12px;font-size:12px">${s.last_name}</td>
+            <td style="padding:7px 12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--blue)">${s.year_level}</td>
+            <td style="padding:7px 12px"><span style="font-size:10px;color:var(--green)">✓ Ready</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    `;
+
+    errDiv.innerHTML = errors.length
+      ? errors.map(e => `<div>⚠ ${e}</div>`).join('')
+      : '';
+
+    submitBtn.textContent = `Import ${valid.length} Student${valid.length !== 1 ? 's' : ''}`;
+    submitBtn.onclick = submitCSVImport;
+
+    // Update dropzone
+    const dz = document.getElementById('csv-dropzone');
+    dz.innerHTML = `<div style="font-size:13px;color:var(--green)">✓ ${file.name} loaded</div><div style="font-size:11px;color:var(--text3);margin-top:4px">Click to choose a different file</div><input type="file" id="student-csv-input" accept=".csv" style="display:none" onchange="handleStudentCSVFile(this)">`;
+  };
+  reader.readAsText(file);
+}
+
+async function submitCSVImport() {
+  const students = state._csvPreviewStudents || [];
+  if (!students.length) { toast('No students to import', 'error'); return; }
+  closeModal();
+
+  let added = 0;
+  for (const s of students) {
+    const result = await apiCall('addStudent', s);
+    if (result.success) {
+      state.students.push({
+        id: result.student_id,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        year_level: s.year_level,
+        date_added: new Date().toISOString()
+      });
+      added++;
+    }
+  }
+  toast(`✓ Imported ${added} student${added !== 1 ? 's' : ''}`, 'success');
+  renderView();
+}
+
+async function submitAddStudent() {
+  const first = document.getElementById('f-firstname').value.trim();
+  const last = document.getElementById('f-lastname').value.trim();
+  const year = document.getElementById('f-year').value;
+  if (!first || !last || !year) { toast('Please fill in all fields', 'error'); return; }
+  closeModal();
+  await addStudent({ first_name: first, last_name: last, year_level: year });
+}
+
+function openMasteryPicker(studentId, code, currentMastery) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">Record Mastery</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--blue);margin-bottom:16px">${code}</div>
+        <div class="form-group">
+          <label class="form-label">Mastery Level</label>
+          <div class="mastery-picker">
+            ${['Achieved','Developing','Emerging','Not taught'].map(m => `
+              <button class="mp-option ${currentMastery===m?'selected-'+m.toLowerCase().replace(' ',''):''}"
+                onclick="selectMastery(this, '${m}')" data-mastery="${m}">
+                ${masteryDot(m)}<br>${m}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date Assessed</label>
+          <input class="form-input" type="date" id="f-date" value="${new Date().toISOString().split('T')[0]}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes (optional)</label>
+          <textarea class="form-textarea" id="f-notes" placeholder="Teacher observations…"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitMastery('${studentId}','${code}')">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function selectMastery(btn, mastery) {
+  document.querySelectorAll('.mp-option').forEach(b => b.className = 'mp-option');
+  btn.className = 'mp-option selected-' + mastery.toLowerCase().replace(' ','');
+}
+
+async function submitMastery(studentId, code) {
+  const selected = document.querySelector('.mp-option[class*="selected-"]');
+  if (!selected) { toast('Please select a mastery level', 'error'); return; }
+  const mastery = selected.dataset.mastery;
+  const date = document.getElementById('f-date').value;
+  const notes = document.getElementById('f-notes').value;
+  closeModal();
+  await saveProgress({
+    student_id: studentId,
+    content_descriptor_code: code,
+    mastery_level: mastery,
+    date_assessed: date,
+    teacher_notes: notes
+  });
+}
+
+function openBulkAssess(studentId) {
+  // Open mastery picker for quick code entry
+  const code = prompt('Enter curriculum code to assess (e.g. AC9E1LY01):');
+  if (code) openMasteryPicker(studentId, code.trim(), 'Not taught');
+}
+
+function closeModal() {
+  const m = document.getElementById('modal-overlay');
+  if (m) m.remove();
+}
+
+// Close modal on overlay click
+document.addEventListener('click', e => {
+  if (e.target.id === 'modal-overlay') closeModal();
+});
+
+// ── INIT ──
+async function init() {
+  try {
+    await Promise.all([loadStudents(), loadProgress()]);
+    state.loading = false;
+    renderView();
+  } catch(e) {
+    console.error('Init error:', e);
+    state.loading = false;
+    renderView();
+    toast('Could not connect to Google Sheets. Check your connection.', 'error');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
