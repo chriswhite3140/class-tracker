@@ -714,7 +714,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">English · P–6</div>
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.5.0</div>
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.6.0</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -723,6 +723,9 @@ body {
       </button>
       <button class="nav-btn" onclick="showView('students')" id="nav-students">
         <span class="nav-icon">◎</span> Students
+      </button>
+      <button class="nav-btn" onclick="showView('overview')" id="nav-overview">
+        <span class="nav-icon">▦</span> Class Overview
       </button>
       <div class="nav-section">Browse Data</div>
       <button class="nav-btn" onclick="showView('curriculum')" id="nav-curriculum">
@@ -1019,6 +1022,7 @@ function renderView() {
     case 'dashboard': renderDashboard(main); break;
     case 'students': renderStudents(main); break;
     case 'student-detail': renderStudentDetail(main); break;
+    case 'overview': renderClassOverview(main); break;
     case 'curriculum': renderCurriculum(main); break;
     case 'standards': renderStandards(main); break;
     case 'progressions': renderProgressions(main); break;
@@ -1027,7 +1031,199 @@ function renderView() {
 }
 
 // ── DASHBOARD ──
-const APP_VERSION = 'v0.5.0';
+
+// ── CLASS OVERVIEW ──
+function renderClassOverview(main) {
+  const students = state.students;
+  const yearLevelMap = { 'F':'Foundation','1':'Year 1','2':'Year 2','3':'Year 3','4':'Year 4','5':'Year 5','6':'Year 6' };
+
+  // Overview filter state
+  if (!state.overviewFilter) state.overviewFilter = { year: 'all', strand: 'all', groupBy: 'strand' };
+  const ovf = state.overviewFilter;
+
+  // Get English strands
+  const strands = ['all', ...new Set(
+    state.curriculumCodes.filter(c => c.Subject === 'English').map(c => c.Strand).filter(Boolean)
+  ).values()].sort();
+
+  // Filter codes to English + selected year/strand
+  function getCodesForStudent(student) {
+    const csvYear = yearLevelMap[student.year_level] || student.year_level;
+    return state.curriculumCodes.filter(c => {
+      if (c.Subject !== 'English') return false;
+      if ((c['Year Level'] || '').trim() !== csvYear) return false;
+      if (ovf.strand !== 'all' && c.Strand !== ovf.strand) return false;
+      return true;
+    });
+  }
+
+  // Get strands for a student's year
+  function getStrandsForStudent(student) {
+    const csvYear = yearLevelMap[student.year_level] || student.year_level;
+    return [...new Set(
+      state.curriculumCodes.filter(c => c.Subject === 'English' && (c['Year Level']||'').trim() === csvYear)
+        .map(c => c.Strand).filter(Boolean)
+    )].sort();
+  }
+
+  // Mastery colour helpers
+  function masteryColour(pct) {
+    if (pct >= 80) return 'var(--green)';
+    if (pct >= 50) return 'var(--gold)';
+    if (pct > 0)   return 'var(--rust)';
+    return 'var(--border2)';
+  }
+
+  function masteryBg(pct) {
+    if (pct >= 80) return 'var(--green-dim)';
+    if (pct >= 50) return 'var(--gold-dim)';
+    if (pct > 0)   return 'var(--rust-dim)';
+    return 'var(--surface2)';
+  }
+
+  // Filter students by year if set
+  const visibleStudents = students.filter(s =>
+    ovf.year === 'all' || s.year_level === ovf.year
+  ).sort((a,b) => `${a.last_name}${a.first_name}`.localeCompare(`${b.last_name}${b.first_name}`));
+
+  // Build the grid: students as rows, strands as columns
+  function buildStrandGrid() {
+    if (visibleStudents.length === 0) return `<div class="empty-state" style="padding:60px">
+      <div class="empty-icon">▦</div>
+      <div class="empty-title">No students match this filter</div>
+    </div>`;
+
+    // Collect all strands across visible students
+    const allStrands = ovf.strand !== 'all'
+      ? [ovf.strand]
+      : [...new Set(visibleStudents.flatMap(s => getStrandsForStudent(s)))].sort();
+
+    return `
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:600px">
+          <thead>
+            <tr style="background:var(--surface2)">
+              <th style="padding:10px 16px;text-align:left;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--text3);text-transform:uppercase;width:180px;position:sticky;left:0;background:var(--surface2);z-index:2">Student</th>
+              <th style="padding:10px 12px;text-align:center;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--text3);text-transform:uppercase;width:80px">Overall</th>
+              ${allStrands.map(strand => `
+                <th style="padding:10px 12px;text-align:center;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--text3);text-transform:uppercase;cursor:pointer"
+                  onclick="state.overviewFilter.strand='${strand}';renderClassOverview(document.getElementById('main-content'))">
+                  ${strand}<br>
+                  <span style="font-size:8px;opacity:0.6;font-weight:400">click to filter</span>
+                </th>
+              `).join('')}
+              <th style="padding:10px 12px;text-align:center;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--text3);text-transform:uppercase;width:60px">Gaps</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visibleStudents.map((s, si) => {
+              const allCodes = getCodesForStudent(s);
+              const totalCodes = allCodes.length;
+              const achieved = allCodes.filter(c => getMasteryForCode(s.id, c.Code) === 'Achieved').length;
+              const emerging = allCodes.filter(c => getMasteryForCode(s.id, c.Code) === 'Emerging').length;
+              const overallPct = totalCodes ? Math.round(achieved/totalCodes*100) : 0;
+
+              const strandCells = allStrands.map(strand => {
+                const strandCodes = allCodes.filter(c => c.Strand === strand);
+                const strandAchieved = strandCodes.filter(c => getMasteryForCode(s.id, c.Code) === 'Achieved').length;
+                const strandTotal = strandCodes.length;
+                const pct = strandTotal ? Math.round(strandAchieved/strandTotal*100) : 0;
+                return `
+                  <td style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border);cursor:pointer"
+                    onclick="openStudentDetail('${s.id}')">
+                    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px">
+                      <div style="width:44px;height:44px;border-radius:50%;background:${masteryBg(pct)};border:2px solid ${masteryColour(pct)};
+                        display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:11px;font-weight:600;color:${masteryColour(pct)}">
+                        ${strandTotal ? pct+'%' : '—'}
+                      </div>
+                      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3)">${strandAchieved}/${strandTotal}</div>
+                    </div>
+                  </td>`;
+              }).join('');
+
+              return `
+                <tr style="border-bottom:1px solid var(--border);${si%2===1?'background:rgba(255,255,255,0.02)':''}">
+                  <td style="padding:10px 16px;position:sticky;left:0;background:${si%2===1?'#1c2030':'var(--surface)'};z-index:1;cursor:pointer"
+                    onclick="openStudentDetail('${s.id}')">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div class="sc-avatar ${getAvClass(si)}" style="width:30px;height:30px;font-size:12px;flex-shrink:0">${getInitials(s)}</div>
+                      <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text)">${s.last_name}, ${s.first_name}</div>
+                        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">Yr ${s.year_level} · ${totalCodes} codes</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border)">
+                    <div style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:${masteryColour(overallPct)}">${overallPct}%</div>
+                    <div style="margin-top:4px;height:4px;background:var(--surface2);border-radius:2px;width:52px;margin-inline:auto;overflow:hidden">
+                      <div style="height:100%;width:${overallPct}%;background:${masteryColour(overallPct)};border-radius:2px"></div>
+                    </div>
+                  </td>
+                  ${strandCells}
+                  <td style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border)">
+                    ${emerging > 0
+                      ? `<span style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--rust)">${emerging}</span>`
+                      : `<span style="color:var(--text3);font-size:11px">—</span>`
+                    }
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:16px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-right:4px;align-self:center">Legend</div>
+        ${[['≥80%','var(--green)','var(--green-dim)'],['50–79%','var(--gold)','var(--gold-dim)'],['1–49%','var(--rust)','var(--rust-dim)'],['Not assessed','var(--border2)','var(--surface2)']].map(([label,col,bg]) => `
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="width:14px;height:14px;border-radius:50%;background:${bg};border:2px solid ${col}"></div>
+            <span style="font-size:11px;color:var(--text3)">${label}</span>
+          </div>
+        `).join('')}
+        <div style="margin-left:auto;font-size:11px;color:var(--text3)">Click any cell or name to open student profile · Click strand header to filter</div>
+      </div>
+    `;
+  }
+
+  main.innerHTML = `
+    <div class="topbar" style="flex-wrap:wrap;gap:8px">
+      <div class="topbar-title">Class Overview</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">YEAR</span>
+        ${['all','F','1','2','3','4','5','6'].map(yr => `
+          <button onclick="state.overviewFilter.year='${yr}';renderClassOverview(document.getElementById('main-content'))"
+            style="padding:4px 10px;border-radius:4px;border:1px solid ${ovf.year===yr?'var(--blue)':'var(--border2)'};
+            background:${ovf.year===yr?'var(--blue-dim)':'none'};
+            color:${ovf.year===yr?'var(--blue)':'var(--text3)'};
+            font-family:'DM Mono',monospace;font-size:10px;cursor:pointer">
+            ${yr === 'all' ? 'All Years' : 'Yr '+yr}
+          </button>
+        `).join('')}
+        ${ovf.strand !== 'all' ? `
+          <button onclick="state.overviewFilter.strand='all';renderClassOverview(document.getElementById('main-content'))"
+            style="padding:4px 10px;border-radius:4px;border:1px solid var(--teal);background:var(--teal-dim);color:var(--teal);font-family:'DM Mono',monospace;font-size:10px;cursor:pointer">
+            ✕ ${ovf.strand}
+          </button>` : ''}
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">${APP_VERSION}</span>
+      </div>
+    </div>
+    <div class="content" style="padding:0">
+      <div class="card" style="border-radius:0;border-left:none;border-right:none;border-top:none">
+        ${state.curriculumCodes.length === 0
+          ? `<div class="empty-state" style="padding:60px">
+              <div class="empty-icon">▦</div>
+              <div class="empty-title">Curriculum data not loaded yet</div>
+              <div class="empty-sub">The overview will appear once your CSV files have loaded</div>
+            </div>`
+          : buildStrandGrid()
+        }
+      </div>
+    </div>
+  `;
+}
+
+const APP_VERSION = 'v0.6.0';
 
 function renderDashboard(main) {
   const totalStudents = state.students.length;
