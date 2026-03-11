@@ -783,8 +783,8 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK
 const GITHUB_RAW = 'https://raw.githubusercontent.com/chriswhite3140/class-tracker/main/';
 
 const CSV_FILES = {
-  curriculumCodes: { file: 'EnglishContentDescriptors_Pto6_FIXED.csv',        iconId: 'icon-cd', navId: 'nav-load-cd' },
-  standards:       { file: 'EnglishAchievementStandardAspects_Pto6_FIXED.csv', iconId: 'icon-st', navId: 'nav-load-st' },
+  curriculumCodes: { file: 'MASTER_Content_Descriptors_UPDATED_MATCHED.csv',  iconId: 'icon-cd', navId: 'nav-load-cd' },
+  standards:       { file: 'MASTER_Achievement_Standards_ALLCODES.csv',        iconId: 'icon-st', navId: 'nav-load-st' },
   progressions:    { file: 'literacy progressions.csv',                         iconId: 'icon-pr', navId: 'nav-load-pr' },
   aspectLinks:     { file: 'english_aspect_to_cd_links.csv',                   iconId: 'icon-lk', navId: 'nav-load-lk' },
 };
@@ -1204,7 +1204,15 @@ function openStudentDetail(studentId) {
   state.selectedStudent = studentId;
   state.currentView = 'student-detail';
   state.detailFilter = 'all';
+  // Reset year filter to student's own year level
+  const student = state.students.find(x => x.id === studentId);
+  state.detailYearFilter = student ? student.year_level : 'all';
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  renderView();
+}
+
+function setDetailYearFilter(year) {
+  state.detailYearFilter = year;
   renderView();
 }
 
@@ -1215,11 +1223,23 @@ function renderStudentDetail(main) {
   const si = state.students.indexOf(s);
   const filter = state.detailFilter || 'all';
 
+  // Year level map: student year label → CSV year level value
+  const yearLevelMap = {
+    'F': 'Foundation', '1': 'Year 1', '2': 'Year 2', '3': 'Year 3',
+    '4': 'Year 4',     '5': 'Year 5', '6': 'Year 6'
+  };
+
+  // Year level toggle — default to student's year, allow showing adjacent years
+  const yearFilter = state.detailYearFilter !== undefined ? state.detailYearFilter : s.year_level;
+
+  // Filter to English only, then by year level
   let codes = state.curriculumCodes.filter(c => {
-    if (s.year_level) {
-      // Show codes relevant to year level if possible
-    }
-    return true;
+    // Subject filter — English only for now
+    if (c.Subject && c.Subject.toLowerCase() !== 'english') return false;
+    // Year level filter
+    if (!yearFilter || yearFilter === 'all') return true;
+    const csvYear = yearLevelMap[yearFilter] || yearFilter;
+    return (c['Year Level'] || '').trim() === csvYear;
   });
 
   const filteredCodes = codes.filter(c => {
@@ -1233,23 +1253,34 @@ function renderStudentDetail(main) {
   });
 
   const stats = {
-    achieved: codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Achieved').length,
-    developing: codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Developing').length,
-    emerging: codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Emerging').length,
+    achieved:  codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Achieved').length,
+    developing:codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Developing').length,
+    emerging:  codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Emerging').length,
     nottaught: codes.filter(c => getMasteryForCode(s.id, c.Code) === 'Not taught').length,
   };
 
   main.innerHTML = `
-    <div class="detail-header">
+    <div class="detail-header" style="flex-wrap:wrap;gap:12px">
       <button class="btn" onclick="showView('students')" style="margin-right:4px">← Back</button>
       <div class="detail-avatar ${getAvClass(si)}">${getInitials(s)}</div>
       <div>
         <div class="detail-name">${s.first_name} ${s.last_name}</div>
-        <div class="detail-meta">Year ${s.year_level} · ${codes.length} curriculum codes</div>
+        <div class="detail-meta">Year ${s.year_level} · showing ${codes.length} codes</div>
       </div>
-      <div class="detail-actions">
-        <button class="btn btn-primary" onclick="openBulkAssess('${s.id}')">+ Record Assessment</button>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <span style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-right:4px">Year Level</span>
+        ${['all','F','1','2','3','4','5','6'].map(yr => `
+          <button onclick="setDetailYearFilter('${yr}')"
+            style="padding:4px 10px;border-radius:4px;border:1px solid ${yearFilter===yr||(!yearFilter&&yr==='all')?'var(--blue)':'var(--border2)'};
+            background:${yearFilter===yr||(!yearFilter&&yr==='all')?'var(--blue-dim)':'none'};
+            color:${yearFilter===yr||(!yearFilter&&yr==='all')?'var(--blue)':'var(--text3)'};
+            font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;transition:all 0.15s;
+            font-weight:${yr===s.year_level?'700':'400'}">
+            ${yr === 'all' ? 'All' : yr === 'F' ? 'F' : yr}${yr === s.year_level ? ' ★' : ''}
+          </button>
+        `).join('')}
       </div>
+      <button class="btn btn-primary" onclick="openBulkAssess('${s.id}')">+ Record Assessment</button>
     </div>
     <div class="content">
       <div class="mastery-tabs">
@@ -1293,8 +1324,8 @@ function renderStudentDetail(main) {
                   const date = prog ? prog.date.split('T')[0] : '—';
                   return `<tr style="cursor:pointer" onclick="openCodeDetail('${c.Code}','${s.id}')">
                     <td><span class="code-pill" style="background:var(--surface2);color:var(--blue)">${c.Code}</span></td>
-                    <td style="max-width:300px;color:var(--text2)">${c.Aspect || '—'}</td>
-                    <td><span class="aspect-tag">${c['Linked Aspect IDs'] ? c['Linked Aspect IDs'].split(',')[0] : '—'}</span></td>
+                    <td style="max-width:300px;color:var(--text2)">${c.Descriptor || c.Aspect || '—'}</td>
+                    <td><span class="aspect-tag">${c.Strand || '—'}</span></td>
                     <td onclick="event.stopPropagation()">
                       <div class="mastery-badge ${masteryClass(mastery)}" onclick="openMasteryPicker('${s.id}','${c.Code}','${mastery}')">
                         ${masteryDot(mastery)} ${mastery}
@@ -1352,16 +1383,18 @@ function renderCurriculum(main) {
               <thead>
                 <tr>
                   <th>Code</th>
-                  <th>Aspect / Learning Outcome</th>
-                  <th>Linked Standards</th>
+                  <th>Descriptor</th>
+                  <th>Strand</th>
+                  <th>Year</th>
                 </tr>
               </thead>
               <tbody>
                 ${codes.map(c => `
                   <tr style="cursor:pointer" onclick="openCodeDetail('${c.Code}', null)">
                     <td><span class="code-pill" style="background:var(--blue-dim);color:var(--blue)">${c.Code}</span></td>
-                    <td style="color:var(--text2);max-width:400px">${c.Aspect || '—'}</td>
-                    <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c['Linked Aspect IDs'] || '—'}</td>
+                    <td style="color:var(--text2);max-width:360px">${c.Descriptor || c.Aspect || '—'}</td>
+                    <td><span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:3px;background:var(--surface2);color:var(--text3)">${c.Strand || '—'}</span></td>
+                    <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c['Year Level'] || '—'}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1540,36 +1573,32 @@ function filterProgressions(q) {
 function getCodeDetails(code) {
   const cd = state.curriculumCodes.find(c => c.Code === code) || {};
 
-  // Get linked aspect IDs from the content descriptor
-  const linkedIds = (cd['Linked Aspect IDs'] || '').split(',').map(s => s.trim()).filter(Boolean);
+  // Get linked achievement standard IDs from the new Linked Achievement IDs column
+  const linkedIds = (cd['Linked Achievement IDs'] || cd['Linked Aspect IDs'] || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
 
-  // Get matching standards aspects
+  // Get matching standards using Achievement Standard ID field
   const linkedStandards = linkedIds.map(id => {
-    return state.standards.find(s => (s['Aspect ID'] || '').trim() === id);
+    return state.standards.find(s =>
+      (s['Achievement Standard ID'] || s['Aspect ID'] || '').trim() === id
+    );
   }).filter(Boolean);
 
-  // Get linked progression indicators via aspect links
-  const linkedLinks = state.aspectLinks.filter(lk => {
-    const cdCode = (lk['Content descriptor code'] || lk['content descriptor code'] || '').trim();
-    return cdCode === code;
-  });
+  // Get strand-based progression matches
+  const strand = (cd.Strand || '').toLowerCase();
+  const subStrand = (cd['Sub-strand'] || '').toLowerCase();
 
-  const linkedAspectIds = linkedLinks.map(lk =>
-    (lk['Achievement standard aspect ID'] || lk['achievement standard aspect ID'] || '').trim()
-  ).filter(Boolean);
-
-  // Get matching progressions by sub-element matching standard aspect names
   const relatedProgressions = [];
-  linkedStandards.forEach(std => {
-    const aspectName = (std.Aspect || '').toLowerCase();
-    state.progressions.forEach(p => {
-      const subEl = (p['Sub-element'] || '').toLowerCase();
-      if (aspectName && subEl && (aspectName.includes(subEl.substring(0,8)) || subEl.includes(aspectName.substring(0,8)))) {
-        if (!relatedProgressions.find(x => x['Indicator ID'] === p['Indicator ID'])) {
-          relatedProgressions.push(p);
-        }
-      }
-    });
+  state.progressions.forEach(p => {
+    const elem = (p['Element'] || '').toLowerCase();
+    const subEl = (p['Sub-element'] || '').toLowerCase();
+    const match = (strand && elem.includes(strand.substring(0,5))) ||
+                  (subStrand && subEl.includes(subStrand.substring(0,5))) ||
+                  (strand.includes('literacy') && elem.includes('literacy')) ||
+                  (strand.includes('language') && elem.includes('language'));
+    if (match && !relatedProgressions.find(x => x['Indicator ID'] === p['Indicator ID'])) {
+      relatedProgressions.push(p);
+    }
   });
 
   return { cd, linkedStandards, relatedProgressions: relatedProgressions.slice(0, 8), linkedIds };
@@ -1602,8 +1631,13 @@ function openCodeDetail(code, studentId) {
     <!-- Header -->
     <div style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px;flex-shrink:0">
       <div style="flex:1">
-        <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--blue);margin-bottom:5px">${code}</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.5">${cd.Aspect || '—'}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <span style="font-family:'DM Mono',monospace;font-size:13px;color:var(--blue)">${code}</span>
+          ${cd['Year Level'] ? `<span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:var(--surface2);color:var(--text3)">${cd['Year Level']}</span>` : ''}
+          ${cd.Strand ? `<span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:var(--blue-dim);color:var(--blue)">${cd.Strand}</span>` : ''}
+          ${cd['Sub-strand'] ? `<span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:var(--surface2);color:var(--text3)">${cd['Sub-strand']}</span>` : ''}
+        </div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">${cd.Descriptor || cd.Aspect || '—'}</div>
       </div>
       <button onclick="document.getElementById('code-detail-panel').remove()"
         style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:2px;line-height:1;flex-shrink:0">✕</button>
@@ -1640,12 +1674,14 @@ function openCodeDetail(code, studentId) {
         ${linkedIds.length === 0
           ? `<div style="font-size:12px;color:var(--text3)">No linked standards found</div>`
           : linkedIds.map(id => {
-              const std = linkedStandards.find(s => (s['Aspect ID'] || '').trim() === id);
+              const std = linkedStandards.find(s =>
+                (s['Achievement Standard ID'] || s['Aspect ID'] || '').trim() === id
+              );
               return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);align-items:flex-start">
                 <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--gold);background:var(--gold-dim);padding:2px 7px;border-radius:3px;flex-shrink:0;margin-top:2px">${id}</span>
                 <div>
-                  <div style="font-size:12px;color:var(--text2);line-height:1.4">${std ? std.Aspect : 'Standard not found'}</div>
-                  ${std ? `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);margin-top:3px">Year ${std.Year} · ${std.Code || ''}</div>` : ''}
+                  <div style="font-size:12px;color:var(--text2);line-height:1.4">${std ? (std['Standard Text'] || std.Aspect || 'No text') : 'Standard not found'}</div>
+                  ${std ? `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);margin-top:3px">${std['Year Level'] || ''}</div>` : ''}
                 </div>
               </div>`;
             }).join('')
