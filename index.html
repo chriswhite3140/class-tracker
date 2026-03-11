@@ -714,7 +714,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">English · P–6</div>
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.6.1</div>
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.7.0</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -782,7 +782,7 @@ body {
 <script>
 /*
  * ClassTracker — English Curriculum Progress Tracker
- * Version: v0.6.1
+ * Version: v0.7.0
  * Author: Chris White
  * Repo: https://github.com/chriswhite3140/class-tracker
  * Last updated: 2026-03
@@ -1250,7 +1250,7 @@ function renderClassOverview(main) {
   `;
 }
 
-const APP_VERSION = 'v0.6.1';
+const APP_VERSION = 'v0.7.0';
 
 function renderDashboard(main) {
   const totalStudents = state.students.length;
@@ -1263,6 +1263,73 @@ function renderDashboard(main) {
     .sort((a,b) => new Date(b.date) - new Date(a.date))
     .slice(0, 5);
 
+  // Subject breakdown — all subjects in the master CSV
+  const subjectOrder = ['English','Mathematics','Science','HASS','Health and Physical Education','Design and Technologies','Digital Technologies'];
+  const subjectColours = {
+    'English':                    ['var(--blue)',   'var(--blue-dim)'],
+    'Mathematics':                ['var(--green)',  'var(--green-dim)'],
+    'Science':                    ['var(--teal)',   'var(--teal-dim)'],
+    'HASS':                       ['var(--gold)',   'var(--gold-dim)'],
+    'Health and Physical Education': ['var(--rust)', 'var(--rust-dim)'],
+    'Design and Technologies':    ['var(--purple)', 'var(--purple-dim)'],
+    'Digital Technologies':       ['var(--purple)', 'var(--purple-dim)'],
+  };
+  const subjectIcons = {
+    'English':'✦','Mathematics':'∑','Science':'⚗','HASS':'◎',
+    'Health and Physical Education':'◉','Design and Technologies':'⬡','Digital Technologies':'⬡'
+  };
+
+  const subjects = subjectOrder.filter(subj =>
+    state.curriculumCodes.some(c => c.Subject === subj)
+  );
+
+  // Per-subject strand breakdown
+  function subjectCard(subj) {
+    const [col, bg] = subjectColours[subj] || ['var(--text2)', 'var(--surface2)'];
+    const icon = subjectIcons[subj] || '◈';
+    const codes = state.curriculumCodes.filter(c => c.Subject === subj);
+    const totalCodes = codes.length;
+
+    // Strands within this subject
+    const strands = [...new Set(codes.map(c => c.Strand).filter(Boolean))].sort();
+
+    // Assessed codes for this subject (progress records whose code matches)
+    const assessed = state.progress.filter(p =>
+      codes.some(c => c.Code === p.code)
+    );
+    const subjAchieved  = assessed.filter(p => p.mastery === 'Achieved').length;
+    const subjAssessed  = assessed.length;
+    const pct = subjAssessed ? Math.round(subjAchieved / subjAssessed * 100) : 0;
+
+    return `
+      <div class="card" style="cursor:pointer" onclick="cdFilters.subject='${subj}';cdFilters.year='all';cdFilters.strand='all';showView('curriculum')">
+        <div style="padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
+          <div style="width:34px;height:34px;border-radius:8px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:16px;color:${col};flex-shrink:0">${icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${subj}</div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${totalCodes} codes · ${strands.length} strands</div>
+          </div>
+          ${subjAssessed > 0 ? `<div style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:${col}">${pct}%</div>` : `<div style="font-size:10px;color:var(--text3)">No data</div>`}
+        </div>
+        <div style="padding:10px 16px">
+          ${strands.map(strand => {
+            const strandCodes = codes.filter(c => c.Strand === strand);
+            const strandAssessed = state.progress.filter(p => strandCodes.some(c => c.Code === p.code));
+            const strandAchieved = strandAssessed.filter(p => p.mastery === 'Achieved').length;
+            const strandPct = strandAssessed.length ? Math.round(strandAchieved / strandAssessed.length * 100) : 0;
+            return `
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <div style="font-size:10px;color:var(--text3);width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">${strand}</div>
+                <div style="flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden">
+                  <div style="height:100%;width:${strandPct}%;background:${col};border-radius:2px;transition:width 0.3s"></div>
+                </div>
+                <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);width:28px;text-align:right">${strandAssessed.length ? strandPct+'%' : '—'}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
   main.innerHTML = `
     <div class="topbar">
       <div class="topbar-title">Dashboard</div>
@@ -1272,6 +1339,8 @@ function renderDashboard(main) {
       </div>
     </div>
     <div class="content">
+
+      <!-- Top stats -->
       <div class="stats-row">
         <div class="stat-card c-blue">
           <div class="stat-label">Students</div>
@@ -1295,6 +1364,16 @@ function renderDashboard(main) {
         </div>
       </div>
 
+      <!-- Subject breakdown -->
+      ${subjects.length > 0 ? `
+        <div style="margin-bottom:6px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)">
+          Learning Areas · click to browse codes
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px">
+          ${subjects.map(subjectCard).join('')}
+        </div>` : ''}
+
+      <!-- Students + recent assessments -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div class="card">
           <div class="card-head">
@@ -1338,10 +1417,11 @@ function renderDashboard(main) {
               : recent.map(p => {
                   const student = state.students.find(s => s.id === p.student_id);
                   const name = student ? `${student.first_name} ${student.last_name}` : 'Unknown';
+                  const cd = state.curriculumCodes.find(c => c.Code === p.code);
                   return `<div style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border)">
                     <div style="flex:1">
                       <div style="font-size:12px;font-weight:600">${name}</div>
-                      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${p.code}</div>
+                      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${p.code}${cd ? ' · '+cd.Subject : ''}</div>
                     </div>
                     <div class="mastery-badge ${masteryClass(p.mastery)}">${masteryDot(p.mastery)} ${p.mastery}</div>
                   </div>`;
@@ -1350,6 +1430,7 @@ function renderDashboard(main) {
           </div>
         </div>
       </div>
+
     </div>
   `;
 }
