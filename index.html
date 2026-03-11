@@ -714,7 +714,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">English · P–6</div>
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.6.0</div>
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.6.1</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -780,6 +780,21 @@ body {
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
+/*
+ * ClassTracker — English Curriculum Progress Tracker
+ * Version: v0.6.1
+ * Author: Chris White
+ * Repo: https://github.com/chriswhite3140/class-tracker
+ * Last updated: 2026-03
+ *
+ * Architecture:
+ *   - Frontend: Single-file HTML/JS/CSS (this file), hosted on Netlify
+ *   - Data: Google Sheets via Apps Script REST API
+ *   - Curriculum: CSV files auto-fetched from GitHub raw URLs
+ *
+ * Views: Dashboard, Students, Class Overview, Curriculum Codes, Standards, Lit Progressions
+ * Key functions: renderClassOverview, renderStudentDetail, openCodeDetail, openMasteryPicker
+ */
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
 
@@ -1048,7 +1063,8 @@ function renderClassOverview(main) {
 
   // Filter codes to English + selected year/strand
   function getCodesForStudent(student) {
-    const csvYear = yearLevelMap[student.year_level] || student.year_level;
+    const normYr = normaliseYear(student.year_level);
+    const csvYear = yearLevelMap[normYr] || normYr;
     return state.curriculumCodes.filter(c => {
       if (c.Subject !== 'English') return false;
       if ((c['Year Level'] || '').trim() !== csvYear) return false;
@@ -1059,7 +1075,8 @@ function renderClassOverview(main) {
 
   // Get strands for a student's year
   function getStrandsForStudent(student) {
-    const csvYear = yearLevelMap[student.year_level] || student.year_level;
+    const normYr = normaliseYear(student.year_level);
+    const csvYear = yearLevelMap[normYr] || normYr;
     return [...new Set(
       state.curriculumCodes.filter(c => c.Subject === 'English' && (c['Year Level']||'').trim() === csvYear)
         .map(c => c.Strand).filter(Boolean)
@@ -1082,8 +1099,18 @@ function renderClassOverview(main) {
   }
 
   // Filter students by year if set
+  // Normalise year_level: handle both '2' and 'Year 2' formats from Sheets
+  function normaliseYear(val) {
+    if (!val) return '';
+    const v = val.toString().trim();
+    // 'Year 2' → '2', 'Foundation' → 'F', 'Prep' → 'F', 'F' → 'F'
+    if (v === 'Foundation' || v === 'Prep' || v === 'F') return 'F';
+    const m = v.match(/^(?:Year\s*)?(\d+)$/);
+    return m ? m[1] : v;
+  }
+
   const visibleStudents = students.filter(s =>
-    ovf.year === 'all' || s.year_level === ovf.year
+    ovf.year === 'all' || normaliseYear(s.year_level) === ovf.year
   ).sort((a,b) => `${a.last_name}${a.first_name}`.localeCompare(`${b.last_name}${b.first_name}`));
 
   // Build the grid: students as rows, strands as columns
@@ -1149,7 +1176,7 @@ function renderClassOverview(main) {
                       <div class="sc-avatar ${getAvClass(si)}" style="width:30px;height:30px;font-size:12px;flex-shrink:0">${getInitials(s)}</div>
                       <div>
                         <div style="font-size:13px;font-weight:600;color:var(--text)">${s.last_name}, ${s.first_name}</div>
-                        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">Yr ${s.year_level} · ${totalCodes} codes</div>
+                        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">Yr ${normaliseYear(s.year_level)} · ${totalCodes} codes</div>
                       </div>
                     </div>
                   </td>
@@ -1223,7 +1250,7 @@ function renderClassOverview(main) {
   `;
 }
 
-const APP_VERSION = 'v0.6.0';
+const APP_VERSION = 'v0.6.1';
 
 function renderDashboard(main) {
   const totalStudents = state.students.length;
