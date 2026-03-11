@@ -1348,77 +1348,132 @@ function setDetailFilter(f) {
 }
 
 // ── CURRICULUM CODES VIEW ──
+
+// Curriculum filter state
+let cdFilters = { subject: 'English', year: 'all', strand: 'all', sort: 'code', search: '' };
+
+function getFilteredCurriculumCodes() {
+  const subjects = ['English','Mathematics','Science','HASS','Health and Physical Education','Design and Technologies','Digital Technologies'];
+  const yearOrder = ['Foundation','Year 1','Year 2','Year 3','Year 4','Year 5','Year 6'];
+
+  let codes = state.curriculumCodes.filter(c => {
+    const subj = (c.Subject || '').trim();
+    const yr   = (c['Year Level'] || '').trim();
+    const str  = (c.Strand || '').trim();
+    const q    = cdFilters.search.toLowerCase();
+
+    if (cdFilters.subject !== 'all' && subj !== cdFilters.subject) return false;
+    if (cdFilters.year    !== 'all' && yr   !== cdFilters.year)    return false;
+    if (cdFilters.strand  !== 'all' && str  !== cdFilters.strand)  return false;
+    if (q && !(
+      (c.Code || '').toLowerCase().includes(q) ||
+      (c.Descriptor || '').toLowerCase().includes(q) ||
+      (c.Strand || '').toLowerCase().includes(q)
+    )) return false;
+    return true;
+  });
+
+  // Sort
+  codes.sort((a, b) => {
+    if (cdFilters.sort === 'year') {
+      const ai = yearOrder.indexOf(a['Year Level']); const bi = yearOrder.indexOf(b['Year Level']);
+      return ai !== bi ? ai - bi : (a.Code || '').localeCompare(b.Code || '');
+    }
+    if (cdFilters.sort === 'strand') {
+      return (a.Strand || '').localeCompare(b.Strand || '') || (a.Code || '').localeCompare(b.Code || '');
+    }
+    return (a.Code || '').localeCompare(b.Code || '');
+  });
+
+  return codes;
+}
+
 function renderCurriculum(main) {
-  const codes = state.curriculumCodes;
-  main.innerHTML = `
-    <div class="topbar">
+  const allCodes  = state.curriculumCodes;
+  const codes     = getFilteredCurriculumCodes();
+
+  // Unique values for filter dropdowns (from full dataset)
+  const subjects  = ['all', ...new Set(allCodes.map(c => c.Subject).filter(Boolean))].sort();
+  const years     = ['all','Foundation','Year 1','Year 2','Year 3','Year 4','Year 5','Year 6'];
+  const strands   = ['all', ...new Set(
+    allCodes.filter(c => cdFilters.subject === 'all' || c.Subject === cdFilters.subject)
+            .map(c => c.Strand).filter(Boolean)
+  )].sort();
+
+  function sel(opts, val, onchange) {
+    return `<select onchange="${onchange}" style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:5px 8px;color:var(--text2);font-size:12px;cursor:pointer;outline:none">
+      ${opts.map(o => `<option value="${o}" ${val===o?'selected':''}>${o === 'all' ? 'All' : o}</option>`).join('')}
+    </select>`;
+  }
+
+  main.innerHTML = \`
+    <div class="topbar" style="flex-wrap:wrap;gap:8px">
       <div class="topbar-title">Curriculum Codes</div>
-      <div class="topbar-actions">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto">
         <div class="search-wrap">
           <span class="search-icon">⌕</span>
-          <input class="search-input" placeholder="Search codes…" oninput="filterCodes(this.value)" id="code-search">
+          <input class="search-input" placeholder="Search…" value="\${cdFilters.search}"
+            oninput="cdFilters.search=this.value;renderCurriculum(document.getElementById('main-content'))" id="code-search">
         </div>
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">SUBJECT</span>
+        \${sel(subjects, cdFilters.subject, "cdFilters.subject=this.value;cdFilters.strand='all';renderCurriculum(document.getElementById('main-content'))")}
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">YEAR</span>
+        \${sel(years, cdFilters.year, "cdFilters.year=this.value;renderCurriculum(document.getElementById('main-content'))")}
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">STRAND</span>
+        \${sel(strands, cdFilters.strand, "cdFilters.strand=this.value;renderCurriculum(document.getElementById('main-content'))")}
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">SORT</span>
+        \${sel(['code','year','strand'], cdFilters.sort, "cdFilters.sort=this.value;renderCurriculum(document.getElementById('main-content'))")}
       </div>
     </div>
     <div class="content">
-      ${codes.length === 0
-        ? `<div class="empty-state">
+      \${allCodes.length === 0
+        ? \`<div class="empty-state">
             <div class="empty-icon">≡</div>
             <div class="empty-title">No curriculum data loaded</div>
-            <div class="empty-sub">Upload your EnglishContentDescriptors CSV using the button below</div>
-            <label class="btn btn-primary" style="margin-top:12px;cursor:pointer">
-              📂 Load CSV
-              <input type="file" accept=".csv" style="display:none" onchange="loadCurriculumCSV(this)">
-            </label>
-          </div>`
-        : `<div class="card">
-            <div class="card-head">
-              <div class="card-title">${codes.length} Curriculum Codes</div>
-              <label class="btn" style="cursor:pointer">
-                ↺ Reload CSV
-                <input type="file" accept=".csv" style="display:none" onchange="loadCurriculumCSV(this)">
-              </label>
+            <div class="empty-sub">Use the sidebar to load your CSV</div>
+          </div>\`
+        : \`<div class="card">
+            <div class="card-head" style="padding:10px 18px">
+              <div style="font-size:13px;color:var(--text2)">
+                Showing <strong style="color:var(--text)">\${codes.length}</strong> of \${allCodes.length} codes
+              </div>
+              \${codes.length !== allCodes.length ? \`<button class="btn" onclick="cdFilters={subject:'English',year:'all',strand:'all',sort:'code',search:''};renderCurriculum(document.getElementById('main-content'))">✕ Clear filters</button>\` : ''}
             </div>
-            <table class="codes-table" id="codes-table">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Descriptor</th>
-                  <th>Strand</th>
-                  <th>Year</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${codes.map(c => `
-                  <tr style="cursor:pointer" onclick="openCodeDetail('${c.Code}', null)">
-                    <td><span class="code-pill" style="background:var(--blue-dim);color:var(--blue)">${c.Code}</span></td>
-                    <td style="color:var(--text2);max-width:360px">${c.Descriptor || c.Aspect || '—'}</td>
-                    <td><span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:3px;background:var(--surface2);color:var(--text3)">${c.Strand || '—'}</span></td>
-                    <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c['Year Level'] || '—'}</td>
+            <div style="overflow-x:auto">
+              <table class="codes-table" id="codes-table" style="table-layout:fixed;width:100%">
+                <colgroup>
+                  <col style="width:130px">
+                  <col style="width:auto">
+                  <col style="width:140px">
+                  <col style="width:110px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style="cursor:pointer" onclick="cdFilters.sort='code';renderCurriculum(document.getElementById('main-content'))">Code \${cdFilters.sort==='code'?'↑':''}</th>
+                    <th>Descriptor</th>
+                    <th style="cursor:pointer" onclick="cdFilters.sort='strand';renderCurriculum(document.getElementById('main-content'))">Strand \${cdFilters.sort==='strand'?'↑':''}</th>
+                    <th style="cursor:pointer" onclick="cdFilters.sort='year';renderCurriculum(document.getElementById('main-content'))">Year \${cdFilters.sort==='year'?'↑':''}</th>
                   </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>`
+                </thead>
+                <tbody>
+                  \${codes.length === 0
+                    ? \`<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text3)">No codes match your filters</td></tr>\`
+                    : codes.map(c => \`
+                      <tr style="cursor:pointer" onclick="openCodeDetail('\${c.Code}', null)">
+                        <td><span class="code-pill" style="background:var(--blue-dim);color:var(--blue);font-size:11px">\${c.Code}</span></td>
+                        <td style="color:var(--text2);font-size:12px;line-height:1.4;padding-right:12px">\${c.Descriptor || c.Aspect || '—'}</td>
+                        <td><span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:3px;background:var(--surface2);color:var(--text3);white-space:nowrap">\${c.Strand || '—'}</span></td>
+                        <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">\${c['Year Level'] || '—'}</td>
+                      </tr>
+                    \`).join('')
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>\`
       }
     </div>
-  `;
-}
-
-function filterCodes(q) {
-  const tbody = document.querySelector('#codes-table tbody');
-  if (!tbody) return;
-  const filtered = state.curriculumCodes.filter(c =>
-    c.Code.toLowerCase().includes(q.toLowerCase()) ||
-    (c.Aspect || '').toLowerCase().includes(q.toLowerCase())
-  );
-  tbody.innerHTML = filtered.map(c => `
-    <tr>
-      <td><span class="code-pill" style="background:var(--blue-dim);color:var(--blue)">${c.Code}</span></td>
-      <td style="color:var(--text2);max-width:400px">${c.Aspect || '—'}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${c['Linked Aspect IDs'] || '—'}</td>
-    </tr>
-  `).join('');
+  \`;
 }
 
 // ── STANDARDS VIEW ──
