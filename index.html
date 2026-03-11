@@ -714,6 +714,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">English · P–6</div>
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.5.0</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -1026,6 +1027,8 @@ function renderView() {
 }
 
 // ── DASHBOARD ──
+const APP_VERSION = 'v0.5.0';
+
 function renderDashboard(main) {
   const totalStudents = state.students.length;
   const totalProgress = state.progress.length;
@@ -1041,6 +1044,7 @@ function renderDashboard(main) {
     <div class="topbar">
       <div class="topbar-title">Dashboard</div>
       <div class="topbar-actions">
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:0.1em">${APP_VERSION}</span>
         <button class="btn btn-primary" onclick="openAddStudentModal()">+ Add Student</button>
       </div>
     </div>
@@ -1479,48 +1483,70 @@ function renderCurriculum(main) {
 // ── STANDARDS VIEW ──
 function renderStandards(main) {
   const stds = state.standards;
-  const years = [...new Set(stds.map(s => s.Year))].sort();
+  // New CSV uses 'Year Level' not 'Year', filter English only
+  const allYearOrder = ['Foundation','Year 1','Year 2','Year 3','Year 4','Year 5','Year 6'];
+  const engStds = stds.filter(s => (s.Subject || '').toLowerCase() === 'english');
+  const years = allYearOrder.filter(y => engStds.some(s => s['Year Level'] === y));
+  const stdFilter = state.standardsYearFilter || 'all';
+  const subjects = ['all', ...new Set(stds.map(s => s.Subject).filter(Boolean))].sort();
+
+  const visibleStds = engStds.filter(s =>
+    stdFilter === 'all' || s['Year Level'] === stdFilter
+  );
 
   main.innerHTML = `
-    <div class="topbar">
+    <div class="topbar" style="flex-wrap:wrap;gap:8px">
       <div class="topbar-title">Achievement Standards</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">YEAR</span>
+        ${['all',...years].map(y => `
+          <button onclick="state.standardsYearFilter='${y}';renderStandards(document.getElementById('main-content'))"
+            style="padding:4px 10px;border-radius:4px;border:1px solid ${stdFilter===y?'var(--gold)':'var(--border2)'};
+            background:${stdFilter===y?'var(--gold-dim)':'none'};
+            color:${stdFilter===y?'var(--gold)':'var(--text3)'};
+            font-family:'DM Mono',monospace;font-size:10px;cursor:pointer">
+            ${y === 'all' ? 'All' : y}
+          </button>
+        `).join('')}
+      </div>
     </div>
     <div class="content">
       ${stds.length === 0
         ? `<div class="empty-state">
             <div class="empty-icon">◇</div>
             <div class="empty-title">No standards data loaded</div>
-            <div class="empty-sub">Upload your EnglishAchievementStandardAspects CSV</div>
-            <label class="btn btn-primary" style="margin-top:12px;cursor:pointer">
-              📂 Load CSV
-              <input type="file" accept=".csv" style="display:none" onchange="loadStandardsCSV(this)">
-            </label>
+            <div class="empty-sub">Use the sidebar to load your CSV</div>
           </div>`
-        : years.map(year => {
-            const yearStds = stds.filter(s => s.Year === year);
-            return `
-              <div class="card" style="margin-bottom:16px">
-                <div class="card-head">
-                  <div class="card-title">Year ${year}</div>
-                  <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${yearStds.length} aspects</span>
-                </div>
-                <table class="codes-table">
-                  <thead>
-                    <tr><th>Aspect ID</th><th>Aspect</th><th>Code</th></tr>
-                  </thead>
-                  <tbody>
-                    ${yearStds.map(s => `
-                      <tr>
-                        <td><span class="code-pill" style="background:var(--gold-dim);color:var(--gold)">${s['Aspect ID']}</span></td>
-                        <td style="color:var(--text2)">${s.Aspect}</td>
-                        <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${s.Code || '—'}</td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
+        : `<div class="card">
+            <div class="card-head" style="padding:10px 18px">
+              <div style="font-size:13px;color:var(--text2)">
+                Showing <strong style="color:var(--text)">${visibleStds.length}</strong> standards
               </div>
-            `;
-          }).join('')
+            </div>
+            <table class="codes-table" style="table-layout:fixed;width:100%">
+              <colgroup>
+                <col style="width:150px">
+                <col style="width:auto">
+                <col style="width:110px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Standard ID</th>
+                  <th>Standard Text</th>
+                  <th>Year</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${visibleStds.map(s => `
+                  <tr>
+                    <td><span class="code-pill" style="background:var(--gold-dim);color:var(--gold);font-size:10px">${s['Achievement Standard ID'] || '—'}</span></td>
+                    <td style="color:var(--text2);font-size:12px;line-height:1.4;padding-right:12px">${s['Standard Text'] || '—'}</td>
+                    <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${s['Year Level'] || '—'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>`
       }
     </div>
   `;
