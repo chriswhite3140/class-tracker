@@ -779,6 +779,16 @@ body {
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
 
+// GitHub raw file base — CSVs fetched automatically from here
+const GITHUB_RAW = 'https://raw.githubusercontent.com/chriswhite3140/class-tracker/main/';
+
+const CSV_FILES = {
+  curriculumCodes: { file: 'EnglishContentDescriptors_Pto6_FIXED.csv',        iconId: 'icon-cd', navId: 'nav-load-cd' },
+  standards:       { file: 'EnglishAchievementStandardAspects_Pto6_FIXED.csv', iconId: 'icon-st', navId: 'nav-load-st' },
+  progressions:    { file: 'literacy progressions.csv',                         iconId: 'icon-pr', navId: 'nav-load-pr' },
+  aspectLinks:     { file: 'english_aspect_to_cd_links.csv',                   iconId: 'icon-lk', navId: 'nav-load-lk' },
+};
+
 // ── STATE ──
 let state = {
   students: [],
@@ -792,18 +802,6 @@ let state = {
   loading: true,
   syncing: false
 };
-
-// ── EMBEDDED DATA (from your CSVs) ──
-// These are parsed from your actual CSV files
-const CURRICULUM_DATA = [
-  // Format: [code, aspect, linkedAspectIds]
-  // Sample from EnglishContentDescriptors - will be populated from CSV
-];
-
-const STANDARDS_DATA = [
-  // Format: [aspectId, year, aspect, code]
-  // Sample from EnglishAchievementStandardAspects - will be populated from CSV
-];
 
 // ── GOOGLE SHEETS API ──
 async function apiCall(action, data = null) {
@@ -1950,10 +1948,45 @@ document.addEventListener('click', e => {
   if (e.target.id === 'modal-overlay') closeModal();
 });
 
+// ── AUTO-FETCH CSVs FROM GITHUB ──
+async function fetchCSVFromGitHub(key) {
+  const { file, iconId, navId } = CSV_FILES[key];
+  try {
+    const url = GITHUB_RAW + file.split(' ').join('%20');
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    const parsed = parseCSV(text);
+    state[key] = parsed;
+    markLoaded(iconId, navId);
+    return parsed.length;
+  } catch(e) {
+    console.warn('Could not auto-load ' + file + ':', e);
+    return 0;
+  }
+}
+
+async function fetchAllCSVs() {
+  const results = await Promise.all([
+    fetchCSVFromGitHub('curriculumCodes'),
+    fetchCSVFromGitHub('standards'),
+    fetchCSVFromGitHub('progressions'),
+    fetchCSVFromGitHub('aspectLinks'),
+  ]);
+  const total = results.reduce((a, b) => a + b, 0);
+  if (total > 0) {
+    toast('Curriculum data loaded automatically', 'success');
+  }
+}
+
 // ── INIT ──
 async function init() {
   try {
-    await Promise.all([loadStudents(), loadProgress()]);
+    await Promise.all([
+      loadStudents(),
+      loadProgress(),
+      fetchAllCSVs()
+    ]);
     state.loading = false;
     renderView();
   } catch(e) {
