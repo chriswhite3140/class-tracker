@@ -1008,6 +1008,14 @@ function getProgressStats(studentId) {
 }
 
 // ── PARSE CSV DATA ──
+function normaliseYear(val) {
+  if (!val) return '';
+  const v = val.toString().trim();
+  if (v === 'Foundation' || v === 'Prep' || v === 'F') return 'F';
+  const m = v.match(/^(?:Year\s*)?(\d+)$/);
+  return m ? m[1] : v;
+}
+
 function parseCSV(text) {
   const lines = text.trim().split('\n');
   const headers = parseCSVLine(lines[0]);
