@@ -727,6 +727,9 @@ body {
       <button class="nav-btn" onclick="showView('overview')" id="nav-overview">
         <span class="nav-icon">▦</span> Class Overview
       </button>
+      <button class="nav-btn" onclick="showView('bulk-assess')" id="nav-bulk">
+        <span class="nav-icon">⊞</span> Bulk Assess
+      </button>
       <div class="nav-section">Browse Data</div>
       <button class="nav-btn" onclick="showView('curriculum')" id="nav-curriculum">
         <span class="nav-icon">≡</span> Curriculum Codes
@@ -787,7 +790,7 @@ body {
 <script>
 /*
  * ClassTracker — English Curriculum Progress Tracker
- * Version: v0.7.5
+ * Version: v0.8.0
  * Author: Chris White
  * Repo: https://github.com/chriswhite3140/class-tracker
  * Last updated: 2026-03
@@ -1045,6 +1048,7 @@ function renderView() {
     case 'students': renderStudents(main); break;
     case 'student-detail': renderStudentDetail(main); break;
     case 'overview': renderClassOverview(main); break;
+    case 'bulk-assess': renderBulkAssess(main); break;
     case 'curriculum': renderCurriculum(main); break;
     case 'standards': renderStandards(main); break;
     case 'progressions': renderProgressions(main); break;
@@ -1278,7 +1282,7 @@ function renderClassOverview(main) {
   `;
 }
 
-const APP_VERSION = 'v0.7.5';
+const APP_VERSION = 'v0.8.0';
 
 function renderDashboard(main) {
   const totalStudents = state.students.length;
@@ -2577,9 +2581,274 @@ async function submitMastery(studentId, code) {
 }
 
 function openBulkAssess(studentId) {
-  // Open mastery picker for quick code entry
-  const code = prompt('Enter curriculum code to assess (e.g. AC9E1LY01):');
-  if (code) openMasteryPicker(studentId, code.trim(), 'Not taught');
+  const student = state.students.find(s => s.id === studentId);
+  if (!state.bulkAssess) state.bulkAssess = { mode:'by-code', yearFilter:'all', subjectFilter:'English', strandFilter:'all', selectedCode:null, selectedStudent:null, date:new Date().toISOString().split('T')[0], pendingChanges:{} };
+  if (student) {
+    state.bulkAssess.yearFilter = normaliseYear(student.year_level);
+    state.bulkAssess.selectedStudent = studentId;
+  }
+  showView('bulk-assess');
+}
+
+// ── BULK ASSESS HELPERS (avoid inline quoting issues) ──
+function setBulkMode(m)    { state.bulkAssess.mode=m; renderBulkAssess(document.getElementById('main-content')); }
+function setBulkSubject(s) { state.bulkAssess.subjectFilter=s; state.bulkAssess.strandFilter='all'; renderBulkAssess(document.getElementById('main-content')); }
+function setBulkYear(y)    { state.bulkAssess.yearFilter=y; renderBulkAssess(document.getElementById('main-content')); }
+function setBulkStrand(s)  { state.bulkAssess.strandFilter=s; renderBulkAssess(document.getElementById('main-content')); }
+function setBulkCode(c)    { state.bulkAssess.selectedCode=c; renderBulkAssess(document.getElementById('main-content')); }
+function setBulkStudent(s) { state.bulkAssess.selectedStudent=s; renderBulkAssess(document.getElementById('main-content')); }
+function setBulkMastery(key, mastery) { state.bulkAssess.pendingChanges[key]=mastery; renderBulkAssess(document.getElementById('main-content')); }
+function applyMasteryToAll(code, mastery) {
+  const ba = state.bulkAssess;
+  const students = state.students.filter(s => ba.yearFilter==='all' || normaliseYear(s.year_level)===ba.yearFilter);
+  students.forEach(s => { ba.pendingChanges[s.id+'|'+code] = mastery; });
+  renderBulkAssess(document.getElementById('main-content'));
+}
+function discardBulkChanges() { state.bulkAssess.pendingChanges={}; renderBulkAssess(document.getElementById('main-content')); }
+function filterBulkCodeList(q) {
+  const list = document.getElementById('ba-code-list');
+  if (!list) return;
+  const ba = state.bulkAssess;
+  const YLM = {'F':'Foundation','1':'Year 1','2':'Year 2','3':'Year 3','4':'Year 4','5':'Year 5','6':'Year 6'};
+  const filtered = state.curriculumCodes.filter(c => {
+    if (c.Subject !== ba.subjectFilter) return false;
+    if (ba.strandFilter !== 'all' && c.Strand !== ba.strandFilter) return false;
+    if (ba.yearFilter !== 'all' && (c['Year Level']||'').trim() !== (YLM[ba.yearFilter]||ba.yearFilter)) return false;
+    if (q && !(c.Code.toLowerCase().includes(q.toLowerCase()) || (c.Descriptor||'').toLowerCase().includes(q.toLowerCase()))) return false;
+    return true;
+  });
+  list.innerHTML = filtered.map(c => buildCodeListItem(c, ba.selectedCode)).join('');
+}
+
+function buildCodeListItem(c, selectedCode) {
+  const active = c.Code === selectedCode;
+  return `<div onclick="setBulkCode('${c.Code}')"
+    style="padding:8px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:10px;align-items:center;${active?'background:var(--blue-dim);':''}">
+    <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--blue);flex-shrink:0;min-width:110px">${c.Code}</span>
+    <span style="font-size:11px;color:var(--text2);line-height:1.3">${c.Descriptor || c.Aspect || ''}</span>
+  </div>`;
+}
+
+// ── BULK ASSESS VIEW ──
+function renderBulkAssess(main) {
+  if (!state.bulkAssess) state.bulkAssess = { mode:'by-code', yearFilter:'all', subjectFilter:'English', strandFilter:'all', selectedCode:null, selectedStudent:null, date:new Date().toISOString().split('T')[0], pendingChanges:{} };
+  const ba = state.bulkAssess;
+  const YLM = {'F':'Foundation','1':'Year 1','2':'Year 2','3':'Year 3','4':'Year 4','5':'Year 5','6':'Year 6'};
+
+  const pendingCount = Object.keys(ba.pendingChanges).length;
+  const availSubjects = [...new Set(state.curriculumCodes.map(c => c.Subject).filter(Boolean))].sort();
+  const availStrands = ['all', ...new Set(state.curriculumCodes.filter(c => c.Subject===ba.subjectFilter).map(c => c.Strand).filter(Boolean))].sort();
+
+  const filteredCodes = state.curriculumCodes.filter(c => {
+    if (c.Subject !== ba.subjectFilter) return false;
+    if (ba.strandFilter !== 'all' && c.Strand !== ba.strandFilter) return false;
+    if (ba.yearFilter !== 'all' && (c['Year Level']||'').trim() !== (YLM[ba.yearFilter]||ba.yearFilter)) return false;
+    return true;
+  });
+
+  const filteredStudents = state.students
+    .filter(s => ba.yearFilter==='all' || normaliseYear(s.year_level)===ba.yearFilter)
+    .sort((a,b) => a.last_name.localeCompare(b.last_name));
+
+  function fBtn(label, active, fn) {
+    return `<button onclick="${fn}"
+      style="padding:4px 10px;border-radius:4px;border:1px solid ${active?'var(--blue)':'var(--border2)'};background:${active?'var(--blue-dim)':'none'};color:${active?'var(--blue)':'var(--text3)'};font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap">${label}</button>`;
+  }
+
+  const masteryColours = {
+    'Achieved':  ['var(--green)', 'var(--green-dim)'],
+    'Developing':['var(--gold)',  'var(--gold-dim)'],
+    'Emerging':  ['var(--rust)',  'var(--rust-dim)'],
+    'Not taught':['var(--border2)','var(--surface2)']
+  };
+
+  function masteryBtns(key, current) {
+    return ['Achieved','Developing','Emerging','Not taught'].map(m => {
+      const [col, bg] = masteryColours[m];
+      const active = current === m;
+      return `<button onclick="setBulkMastery('${key}','${m}')"
+        style="padding:3px 9px;border-radius:4px;border:1px solid ${active?col:'var(--border2)'};background:${active?bg:'none'};color:${active?col:'var(--text3)'};font-family:'DM Mono',monospace;font-size:10px;cursor:pointer">${m}</button>`;
+    }).join('');
+  }
+
+  // ── BY CODE MODE ──
+  function buildByCode() {
+    const code = ba.selectedCode;
+    const cd = code ? state.curriculumCodes.find(c => c.Code===code) : null;
+    const codeListHtml = filteredCodes.map(c => buildCodeListItem(c, code)).join('');
+
+    const rosterHtml = !code
+      ? `<div class="empty-state" style="padding:60px"><div class="empty-icon">⊞</div><div class="empty-title">Select a code on the left</div><div class="empty-sub">Then set mastery for each student</div></div>`
+      : `<div style="display:flex;flex-direction:column;overflow:hidden;height:100%">
+          <div style="padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0">
+            <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--blue)">${code}</span>
+            <span style="font-size:12px;color:var(--text2);flex:1;line-height:1.3">${cd ? (cd.Descriptor||cd.Aspect||'') : ''}</span>
+            <button onclick="applyMasteryToAll('${code}','Achieved')" style="padding:4px 10px;border-radius:4px;border:1px solid var(--green);background:var(--green-dim);color:var(--green);font-family:'DM Mono',monospace;font-size:10px;cursor:pointer">✓ All Achieved</button>
+            <button onclick="applyMasteryToAll('${code}','Developing')" style="padding:4px 10px;border-radius:4px;border:1px solid var(--gold);background:var(--gold-dim);color:var(--gold);font-family:'DM Mono',monospace;font-size:10px;cursor:pointer">◐ All Developing</button>
+          </div>
+          <div style="overflow-y:auto;flex:1">
+            <table style="width:100%;border-collapse:collapse">
+              <tbody>
+                ${filteredStudents.map((s,si) => {
+                  const key = s.id+'|'+code;
+                  const pending = ba.pendingChanges[key];
+                  const saved = getMasteryForCode(s.id, code);
+                  const current = pending !== undefined ? pending : (saved || 'Not taught');
+                  const changed = pending !== undefined && pending !== saved;
+                  return `<tr style="${si%2===1?'background:rgba(255,255,255,0.02)':''}${changed?';box-shadow:inset 3px 0 0 var(--gold)':''}">
+                    <td style="padding:10px 16px;width:200px">
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <div class="sc-avatar ${getAvClass(si)}" style="width:28px;height:28px;font-size:11px;flex-shrink:0">${getInitials(s)}</div>
+                        <div>
+                          <div style="font-size:13px;font-weight:600">${s.last_name}, ${s.first_name}</div>
+                          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">Yr ${s.year_level}${changed?' · <span style="color:var(--gold)">changed</span>':''}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="padding:8px 16px">
+                      <div style="display:flex;gap:6px;flex-wrap:wrap">${masteryBtns(key, current)}</div>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+
+    return `<div style="display:grid;grid-template-columns:340px 1fr;height:calc(100vh - 118px);overflow:hidden">
+      <div style="border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em">Select Code · ${filteredCodes.length} available</div>
+          <input id="ba-code-search" placeholder="Search codes…" oninput="filterBulkCodeList(this.value)"
+            style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border2);border-radius:5px;padding:5px 10px;color:var(--text2);font-size:12px;outline:none">
+        </div>
+        <div id="ba-code-list" style="overflow-y:auto;flex:1">${codeListHtml}</div>
+      </div>
+      <div style="overflow:hidden">${rosterHtml}</div>
+    </div>`;
+  }
+
+  // ── BY STUDENT MODE ──
+  function buildByStudent() {
+    const sid = ba.selectedStudent;
+    const student = sid ? state.students.find(s => s.id===sid) : null;
+
+    const studentListHtml = filteredStudents.map((s,si) => {
+      const active = s.id === sid;
+      const pct = getProgressStats(s.id).pct;
+      return `<div onclick="setBulkStudent('${s.id}')"
+        style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:10px;align-items:center;${active?'background:var(--blue-dim);':''}">
+        <div class="sc-avatar ${getAvClass(si)}" style="width:28px;height:28px;font-size:11px;flex-shrink:0">${getInitials(s)}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${s.last_name}, ${s.first_name}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">Yr ${s.year_level}</div>
+        </div>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green)">${pct}%</span>
+      </div>`;
+    }).join('');
+
+    const codesHtml = !student ? '' : (() => {
+      const normYr = normaliseYear(student.year_level);
+      const csvYear = YLM[normYr] || normYr;
+      const sCodes = state.curriculumCodes.filter(c =>
+        c.Subject===ba.subjectFilter &&
+        (c['Year Level']||'').trim()===csvYear &&
+        (ba.strandFilter==='all' || c.Strand===ba.strandFilter)
+      );
+      return sCodes.map((c,ci) => {
+        const key = student.id+'|'+c.Code;
+        const pending = ba.pendingChanges[key];
+        const saved = getMasteryForCode(student.id, c.Code);
+        const current = pending !== undefined ? pending : (saved || 'Not taught');
+        const changed = pending !== undefined && pending !== saved;
+        return `<tr style="${ci%2===1?'background:rgba(255,255,255,0.02)':''}${changed?';box-shadow:inset 3px 0 0 var(--gold)':''}">
+          <td style="padding:8px 16px;width:130px;vertical-align:top;padding-top:12px">
+            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--blue)">${c.Code}</span>
+          </td>
+          <td style="padding:8px 8px;font-size:11px;color:var(--text2);line-height:1.4;max-width:300px;vertical-align:top;padding-top:12px">${c.Descriptor||c.Aspect||'—'}</td>
+          <td style="padding:8px 16px;vertical-align:top;padding-top:8px">
+            <div style="display:flex;gap:4px;flex-wrap:wrap">${masteryBtns(key, current)}</div>
+          </td>
+        </tr>`;
+      }).join('');
+    })();
+
+    return `<div style="display:grid;grid-template-columns:260px 1fr;height:calc(100vh - 118px);overflow:hidden">
+      <div style="border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface2);font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;flex-shrink:0">
+          Select Student · ${filteredStudents.length} shown
+        </div>
+        <div style="overflow-y:auto;flex:1">${studentListHtml}</div>
+      </div>
+      <div style="overflow:hidden;display:flex;flex-direction:column">
+        ${!student
+          ? `<div class="empty-state" style="padding:60px"><div class="empty-icon">◎</div><div class="empty-title">Select a student on the left</div><div class="empty-sub">Then set mastery for each code</div></div>`
+          : `<div style="padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;gap:10px;flex-shrink:0">
+              <div class="sc-avatar ${getAvClass(0)}" style="width:28px;height:28px;font-size:11px">${getInitials(student)}</div>
+              <div><div style="font-size:13px;font-weight:600">${student.first_name} ${student.last_name}</div>
+              <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">Year ${student.year_level} · ${ba.subjectFilter}</div></div>
+            </div>
+            <div style="overflow-y:auto;flex:1"><table style="width:100%;border-collapse:collapse"><tbody>${codesHtml}</tbody></table></div>`
+        }
+      </div>
+    </div>`;
+  }
+
+  const modeContent = ba.mode === 'by-student' ? buildByStudent() : buildByCode();
+  const subjectShort = s => s==='Health and Physical Education'?'HPE':s==='Design and Technologies'?'D&T':s==='Digital Technologies'?'DigiTech':s;
+
+  main.innerHTML = `
+    <div class="topbar" style="flex-wrap:wrap;gap:6px;padding:10px 20px">
+      <div class="topbar-title" style="margin-right:4px">Bulk Assess</div>
+      ${fBtn('By Code',    ba.mode==='by-code',    "setBulkMode('by-code')")}
+      ${fBtn('By Student', ba.mode==='by-student', "setBulkMode('by-student')")}
+      <div style="width:1px;height:18px;background:var(--border2);margin:0 3px"></div>
+      ${availSubjects.map(s => fBtn(subjectShort(s), ba.subjectFilter===s, `setBulkSubject('${s}')`)).join('')}
+      <div style="width:1px;height:18px;background:var(--border2);margin:0 3px"></div>
+      ${['all','F','1','2','3','4','5','6'].map(yr => fBtn(yr==='all'?'All':'Yr '+yr, ba.yearFilter===yr, `setBulkYear('${yr}')`)).join('')}
+      <div style="width:1px;height:18px;background:var(--border2);margin:0 3px"></div>
+      ${availStrands.map(st => fBtn(st==='all'?'All strands':st, ba.strandFilter===st, `setBulkStrand('${st}')`)).join('')}
+      <div style="width:1px;height:18px;background:var(--border2);margin:0 3px;margin-left:auto"></div>
+      <input type="date" value="${ba.date}" onchange="state.bulkAssess.date=this.value"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:4px 8px;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;outline:none">
+      ${pendingCount > 0 ? `
+        <button onclick="saveBulkAssess()"
+          style="padding:5px 16px;border-radius:6px;border:none;background:var(--green);color:#0f1117;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;cursor:pointer">
+          ↑ Save ${pendingCount} change${pendingCount>1?'s':''}
+        </button>
+        <button onclick="discardBulkChanges()"
+          style="padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:none;color:var(--text3);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer">
+          ✕ Discard
+        </button>` : ''}
+    </div>
+    <div style="overflow:hidden">${modeContent}</div>
+  `;
+}
+
+async function saveBulkAssess() {
+  const ba = state.bulkAssess;
+  const changes = Object.entries(ba.pendingChanges);
+  if (!changes.length) return;
+  setSyncing(true);
+  toast(`Saving ${changes.length} change${changes.length>1?'s':''}…`, 'info');
+  let saved = 0;
+  for (const [key, mastery] of changes) {
+    const [studentId, code] = key.split('|');
+    const existing = state.progress.find(p => p.student_id===studentId && p.code===code);
+    try {
+      if (existing) {
+        const r = await apiCall('updateProgress', { progress_id:existing.id, mastery_level:mastery, date_assessed:ba.date, teacher_notes:existing.notes||'' });
+        if (r.success) { existing.mastery=mastery; existing.date=ba.date; saved++; }
+      } else {
+        const r = await apiCall('saveProgress', { student_id:studentId, content_descriptor_code:code, mastery_level:mastery, date_assessed:ba.date, teacher_notes:'' });
+        if (r.success) { state.progress.push({ id:r.progress_id, student_id:studentId, code, mastery, date:ba.date, notes:'' }); saved++; }
+      }
+    } catch(e) { console.error('Failed to save', key, e); }
+  }
+  ba.pendingChanges = {};
+  setSyncing(false);
+  toast(`✓ Saved ${saved} assessment${saved>1?'s':''}`, 'success');
+  renderBulkAssess(document.getElementById('main-content'));
 }
 
 function closeModal() {
