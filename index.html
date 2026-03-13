@@ -787,7 +787,7 @@ body {
 <script>
 /*
  * ClassTracker — English Curriculum Progress Tracker
- * Version: v0.7.4
+ * Version: v0.7.5
  * Author: Chris White
  * Repo: https://github.com/chriswhite3140/class-tracker
  * Last updated: 2026-03
@@ -1278,7 +1278,7 @@ function renderClassOverview(main) {
   `;
 }
 
-const APP_VERSION = 'v0.7.4';
+const APP_VERSION = 'v0.7.5';
 
 function renderDashboard(main) {
   const totalStudents = state.students.length;
@@ -1908,40 +1908,52 @@ function renderStandards(main) {
 
 // ── PROGRESSIONS VIEW ──
 function renderProgressions(main) {
-  const progs = state.progressions;
+  if (!state.progressionType) state.progressionType = 'literacy';
+  const progType = state.progressionType;
+  const progs = progType === 'numeracy' ? state.numeracyProgressions : state.progressions;
   const elements = [...new Set(progs.map(p => p.Element))].filter(Boolean);
   const activeElem = state.progressionFilter || (elements[0] || '');
+  const typeLabel = progType === 'numeracy' ? 'Numeracy · Mathematics' : 'Literacy · English';
+
+  const elemButtons = elements.map(elem => {
+    const active = activeElem === elem ? 'active t-all' : '';
+    const safeElem = elem.replace(/'/g, "\\'");
+    return '<button class="mastery-tab ' + active + '" onclick="setProgressionFilter(\'' + safeElem + '\')">' + elem + '</button>';
+  }).join('');
+
+  const emptyHtml = `<div class="empty-state">
+    <div class="empty-icon">⟡</div>
+    <div class="empty-title">No ${progType} progressions loaded</div>
+    <div class="empty-sub">${progType === 'numeracy'
+      ? 'Load your Numeracy Progressions CSV using the sidebar button'
+      : 'Load your Literacy Progressions CSV using the sidebar button'}</div>
+  </div>`;
+
+  const contentHtml = progs.length === 0 ? emptyHtml : `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${elemButtons}</div>
+    <div id="prog-content">${renderProgressionContent(progs, activeElem)}</div>`;
 
   main.innerHTML = `
-    <div class="topbar">
-      <div class="topbar-title">Literacy Progressions <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);font-weight:400">· English</span></div>
-      <div class="topbar-actions">
+    <div class="topbar" style="flex-wrap:wrap;gap:8px">
+      <div class="topbar-title">Progressions <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);font-weight:400">· ${typeLabel}</span></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto">
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3)">TYPE</span>
+        <button onclick="state.progressionType='literacy';state.progressionFilter='';renderProgressions(document.getElementById('main-content'))"
+          style="padding:4px 12px;border-radius:4px;border:1px solid ${progType==='literacy'?'var(--blue)':'var(--border2)'};background:${progType==='literacy'?'var(--blue-dim)':'none'};color:${progType==='literacy'?'var(--blue)':'var(--text3)'};font-family:'DM Mono',monospace;font-size:10px;cursor:pointer">
+          ✦ Literacy
+        </button>
+        <button onclick="state.progressionType='numeracy';state.progressionFilter='';renderProgressions(document.getElementById('main-content'))"
+          style="padding:4px 12px;border-radius:4px;border:1px solid ${progType==='numeracy'?'var(--green)':'var(--border2)'};background:${progType==='numeracy'?'var(--green-dim)':'none'};color:${progType==='numeracy'?'var(--green)':'var(--text3)'};font-family:'DM Mono',monospace;font-size:10px;cursor:pointer">
+          ∑ Numeracy
+        </button>
+        <div style="width:1px;height:18px;background:var(--border2);margin:0 2px"></div>
         <div class="search-wrap">
           <span class="search-icon">⌕</span>
-          <input class="search-input" placeholder="Search indicators…" oninput="filterProgressions(this.value)" id="prog-search" style="width:200px">
+          <input class="search-input" placeholder="Search indicators…" oninput="filterProgressions(this.value)" id="prog-search" style="width:180px">
         </div>
       </div>
     </div>
-    <div class="content">
-      ${progs.length === 0
-        ? `<div class="empty-state">
-            <div class="empty-icon">⟡</div>
-            <div class="empty-title">No progressions data loaded</div>
-            <div class="empty-sub">Use the "Progressions" button in the sidebar to upload your literacy_progressions CSV</div>
-          </div>`
-        : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
-            ${elements.map(elem => `
-              <button class="mastery-tab ${activeElem===elem?'active t-all':''}"
-                onclick="setProgressionFilter('${elem.replace(/'/g,"\\'")}')">
-                ${elem}
-              </button>
-            `).join('')}
-          </div>
-          <div id="prog-content">
-            ${renderProgressionContent(progs, activeElem)}
-          </div>`
-      }
-    </div>
+    <div class="content">${contentHtml}</div>
   `;
 }
 
