@@ -704,6 +704,20 @@ body {
 .bar-green { background: var(--green); }
 
 .hidden { display: none !important; }
+
+/* ── PRINT / STUDENT REPORT ── */
+@media print {
+  body { background: #fff !important; color: #111 !important; }
+  .sidebar, .topbar, .detail-header, #modal-overlay,
+  .btn, button, .nav-btn, .mastery-tab,
+  [id^="nav-"], .sync-status { display: none !important; }
+  #main-content { margin: 0 !important; padding: 0 !important; }
+  .print-report { display: block !important; }
+  .app-shell { display: none !important; }
+  @page { margin: 15mm; size: A4; }
+}
+.print-report { display: none; }
+
 </style>
 </head>
 <body>
@@ -714,7 +728,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">English · P–6</div>
-      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.8.0</div>
+      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.9.0</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -792,7 +806,7 @@ body {
  * ============================================================
  * ClassTracker — Australian Curriculum Progress Tracker
  * ============================================================
- * THIS FILE IS VERSION: v0.8.0
+ * THIS FILE IS VERSION: v0.9.0
  * Last updated: 2026-03-13
  * ============================================================
  *
@@ -810,6 +824,7 @@ body {
  *   Dashboard, Students, Student Detail, Class Overview,
  *   Curriculum Codes, Standards, Progressions, Bulk Assess
  *
+ * v0.9.0 - Added printable student report
  * v0.8.0 - Added Bulk Assess view (by-code and by-student modes)
  * v0.7.5 - Added Numeracy Progressions toggle
  * v0.7.0 - Multi-subject dashboard, class overview grid
@@ -1302,7 +1317,7 @@ function renderClassOverview(main) {
   `;
 }
 
-const APP_VERSION = 'v0.8.0';
+const APP_VERSION = 'v0.9.0';
 
 function renderDashboard(main) {
   const totalStudents = state.students.length;
@@ -1622,6 +1637,7 @@ function renderStudentDetail(main) {
   main.innerHTML = `
     <div class="detail-header" style="flex-wrap:wrap;gap:12px">
       <button class="btn" onclick="showView('students')" style="margin-right:4px">← Back</button>
+      <button class="btn btn-primary" onclick="printStudentReport()" style="margin-left:auto">⎙ Print Report</button>
       <div class="detail-avatar ${getAvClass(si)}">${getInitials(s)}</div>
       <div>
         <div class="detail-name">${s.first_name} ${s.last_name}</div>
@@ -2893,6 +2909,177 @@ async function saveBulkAssess() {
   toast(`✓ Saved ${saved} assessment${saved>1?'s':''}`, 'success');
   renderBulkAssess(document.getElementById('main-content'));
 }
+
+// ── STUDENT REPORT (PRINT) ──
+function printStudentReport() {
+  const s = state.students.find(x => x.id === state.selectedStudent);
+  if (!s) return;
+
+  const YLM = {'F':'Foundation','1':'Year 1','2':'Year 2','3':'Year 3','4':'Year 4','5':'Year 5','6':'Year 6'};
+  const normYr = normaliseYear(s.year_level);
+  const csvYear = YLM[normYr] || normYr;
+  const today = new Date().toLocaleDateString('en-AU', {day:'numeric',month:'long',year:'numeric'});
+
+  // All subjects — gather assessed codes
+  const allSubjects = [...new Set(state.curriculumCodes.map(c => c.Subject).filter(Boolean))].sort();
+  const studentProg = getStudentProgress(s.id);
+
+  // Stats across all subjects for student's year
+  const yearCodes = state.curriculumCodes.filter(c => (c['Year Level']||'').trim() === csvYear);
+  const achieved   = yearCodes.filter(c => getMasteryForCode(s.id, c.Code) === 'Achieved').length;
+  const developing = yearCodes.filter(c => getMasteryForCode(s.id, c.Code) === 'Developing').length;
+  const emerging   = yearCodes.filter(c => getMasteryForCode(s.id, c.Code) === 'Emerging').length;
+  const assessed   = achieved + developing + emerging;
+  const total      = yearCodes.length;
+  const pct        = total ? Math.round((achieved/total)*100) : 0;
+
+  // Mastery badge colour (for print = grayscale-friendly patterns)
+  function badge(m) {
+    const styles = {
+      'Achieved':   'background:#d4edda;color:#155724;border:1px solid #c3e6cb',
+      'Developing': 'background:#fff3cd;color:#856404;border:1px solid #ffeeba',
+      'Emerging':   'background:#f8d7da;color:#721c24;border:1px solid #f5c6cb',
+      'Not taught': 'background:#f1f3f4;color:#666;border:1px solid #ddd'
+    };
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;${styles[m]||styles['Not taught']}">${m}</span>`;
+  }
+
+  // Subject sections — only include subjects that have at least one assessed code
+  function buildSubjectSection(subject) {
+    const sCodes = state.curriculumCodes.filter(c =>
+      c.Subject === subject && (c['Year Level']||'').trim() === csvYear
+    );
+    if (!sCodes.length) return '';
+    const sAssessed = sCodes.filter(c => getMasteryForCode(s.id, c.Code) !== 'Not taught');
+    if (!sAssessed.length) return ''; // skip unassessed subjects
+
+    const strands = [...new Set(sCodes.map(c => c.Strand).filter(Boolean))];
+
+    const strandSections = strands.map(strand => {
+      const strandCodes = sCodes.filter(c => c.Strand === strand);
+      const rows = strandCodes.map(c => {
+        const mastery = getMasteryForCode(s.id, c.Code);
+        // Linked standards
+        const linkedIds = (c['Linked Achievement IDs'] || '').split(',').map(x=>x.trim()).filter(Boolean);
+        const standards = linkedIds.map(id => {
+          const st = state.standards.find(x => x['Achievement Standard ID'] === id);
+          return st ? `<div style="font-size:9px;color:#555;margin-top:3px;padding-left:8px;border-left:2px solid #ddd">${st['Standard Text']||''}</div>` : '';
+        }).join('');
+        return `<tr style="border-bottom:1px solid #eee">
+          <td style="padding:6px 8px;width:120px;vertical-align:top">
+            <span style="font-family:monospace;font-size:10px;color:#1a6db5;font-weight:600">${c.Code}</span>
+          </td>
+          <td style="padding:6px 8px;vertical-align:top">
+            <div style="font-size:11px;color:#222;line-height:1.4">${c.Descriptor||c.Aspect||'—'}</div>
+            ${standards}
+          </td>
+          <td style="padding:6px 8px;width:100px;vertical-align:top;text-align:right">${badge(mastery)}</td>
+        </tr>`;
+      }).join('');
+
+      const strandAchieved = strandCodes.filter(c => getMasteryForCode(s.id, c.Code) === 'Achieved').length;
+      return `<div style="margin-bottom:14px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#555;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #ccc">
+          ${strand} &nbsp;·&nbsp; ${strandAchieved}/${strandCodes.length} achieved
+        </div>
+        <table style="width:100%;border-collapse:collapse">${rows}</table>
+      </div>`;
+    }).join('');
+
+    const sAchieved = sCodes.filter(c=>getMasteryForCode(s.id,c.Code)==='Achieved').length;
+    const sDev = sCodes.filter(c=>getMasteryForCode(s.id,c.Code)==='Developing').length;
+    const sEm = sCodes.filter(c=>getMasteryForCode(s.id,c.Code)==='Emerging').length;
+
+    return `<div style="margin-bottom:24px;page-break-inside:avoid">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #333;padding-bottom:4px;margin-bottom:10px">
+        <div style="font-size:14px;font-weight:700;color:#111">${subject}</div>
+        <div style="font-size:10px;color:#555;font-family:monospace">
+          Achieved: ${sAchieved} &nbsp;·&nbsp; Developing: ${sDev} &nbsp;·&nbsp; Emerging: ${sEm} &nbsp;·&nbsp; Total: ${sCodes.length}
+        </div>
+      </div>
+      ${strandSections}
+    </div>`;
+  }
+
+  // Literacy progressions summary
+  function buildLiteracySummary() {
+    if (!state.progressions.length) return '';
+    const elements = [...new Set(state.progressions.map(p => p.Element).filter(Boolean))];
+    // For now just show element names — future: show highest level indicators assessed
+    return `<div style="margin-bottom:20px;page-break-inside:avoid">
+      <div style="font-size:14px;font-weight:700;border-bottom:2px solid #333;padding-bottom:4px;margin-bottom:8px">Literacy Progressions</div>
+      <div style="font-size:10px;color:#555;font-style:italic">Literacy progression tracking is available in the ClassTracker app under Progressions.</div>
+    </div>`;
+  }
+
+  const subjectSections = allSubjects.map(buildSubjectSection).join('');
+
+  const reportHTML = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Student Report — ${s.first_name} ${s.last_name}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; background: #fff; padding: 0; }
+  @page { margin: 15mm; size: A4; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:12px;border-bottom:3px solid #111">
+    <div>
+      <div style="font-size:22px;font-weight:700;color:#111">${s.first_name} ${s.last_name}</div>
+      <div style="font-size:12px;color:#555;margin-top:3px">Year ${s.year_level} &nbsp;·&nbsp; ${csvYear} Curriculum</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:11px;font-weight:700;color:#111">ClassTracker</div>
+      <div style="font-size:10px;color:#777;margin-top:2px">Generated ${today}</div>
+    </div>
+  </div>
+
+  <!-- Summary stats -->
+  <div style="display:flex;gap:12px;margin-bottom:24px">
+    <div style="flex:1;background:#d4edda;border:1px solid #c3e6cb;border-radius:6px;padding:10px 14px">
+      <div style="font-size:22px;font-weight:700;color:#155724">${achieved}</div>
+      <div style="font-size:10px;color:#155724;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Achieved</div>
+    </div>
+    <div style="flex:1;background:#fff3cd;border:1px solid #ffeeba;border-radius:6px;padding:10px 14px">
+      <div style="font-size:22px;font-weight:700;color:#856404">${developing}</div>
+      <div style="font-size:10px;color:#856404;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Developing</div>
+    </div>
+    <div style="flex:1;background:#f8d7da;border:1px solid #f5c6cb;border-radius:6px;padding:10px 14px">
+      <div style="font-size:22px;font-weight:700;color:#721c24">${emerging}</div>
+      <div style="font-size:10px;color:#721c24;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Emerging</div>
+    </div>
+    <div style="flex:1;background:#f1f3f4;border:1px solid #ddd;border-radius:6px;padding:10px 14px">
+      <div style="font-size:22px;font-weight:700;color:#333">${assessed}/${total}</div>
+      <div style="font-size:10px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Assessed · ${pct}%</div>
+    </div>
+  </div>
+
+  <!-- Subject sections -->
+  ${subjectSections || '<p style="color:#888;font-style:italic">No assessments recorded yet.</p>'}
+
+  ${buildLiteracySummary()}
+
+  <!-- Footer -->
+  <div style="margin-top:30px;padding-top:10px;border-top:1px solid #ddd;font-size:9px;color:#aaa;display:flex;justify-content:space-between">
+    <span>ClassTracker · chriswhite3140.github.io/class-tracker</span>
+    <span>Printed ${today}</span>
+  </div>
+</body>
+</html>`;
+
+  // Open in new tab and trigger print
+  const win = window.open('', '_blank');
+  win.document.write(reportHTML);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
+}
+
 
 function closeModal() {
   const m = document.getElementById('modal-overlay');
