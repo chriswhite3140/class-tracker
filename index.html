@@ -789,19 +789,31 @@ body {
 
 <script>
 /*
- * ClassTracker — English Curriculum Progress Tracker
- * Version: v0.8.0
+ * ============================================================
+ * ClassTracker — Australian Curriculum Progress Tracker
+ * ============================================================
+ * THIS FILE IS VERSION: v0.8.0
+ * Last updated: 2026-03-13
+ * ============================================================
+ *
  * Author: Chris White
- * Repo: https://github.com/chriswhite3140/class-tracker
- * Last updated: 2026-03
+ * Repo:   https://github.com/chriswhite3140/class-tracker
+ * Live:   https://chriswhite3140.github.io/class-tracker
  *
  * Architecture:
- *   - Frontend: Single-file HTML/JS/CSS (this file), hosted on Netlify
- *   - Data: Google Sheets via Apps Script REST API
+ *   - Frontend: Single-file HTML/JS/CSS (this file)
+ *   - Hosting:  GitHub Pages (auto-deploys on commit to main)
+ *   - Data:     Google Sheets via Apps Script REST API
  *   - Curriculum: CSV files auto-fetched from GitHub raw URLs
  *
- * Views: Dashboard, Students, Class Overview, Curriculum Codes, Standards, Lit Progressions
- * Key functions: renderClassOverview, renderStudentDetail, openCodeDetail, openMasteryPicker
+ * Views:
+ *   Dashboard, Students, Student Detail, Class Overview,
+ *   Curriculum Codes, Standards, Progressions, Bulk Assess
+ *
+ * v0.8.0 - Added Bulk Assess view (by-code and by-student modes)
+ * v0.7.5 - Added Numeracy Progressions toggle
+ * v0.7.0 - Multi-subject dashboard, class overview grid
+ * ============================================================
  */
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
