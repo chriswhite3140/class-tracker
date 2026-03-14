@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version 0.9.2 -->
+<!-- Version 1.0.0 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -729,7 +729,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">P–6 · All Subjects</div>
-      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v0.9.2</div>
+      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.0</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -744,6 +744,13 @@ body {
       </button>
       <button class="nav-btn" onclick="showView('bulk-assess')" id="nav-bulk">
         <span class="nav-icon">⊞</span> Bulk Assess
+      </button>
+      <button class="nav-btn" onclick="openDailyLogWizard()" id="nav-daily-log" style="position:relative">
+        <span class="nav-icon">✦</span> Log Today
+        <span id="daily-log-badge" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:var(--gold);color:#0f1117;font-family:'DM Mono',monospace;font-size:8px;font-weight:700;padding:1px 5px;border-radius:8px">NEW</span>
+      </button>
+      <button class="nav-btn" onclick="showView('daily-log')" id="nav-daily-log-view">
+        <span class="nav-icon">◷</span> Session History
       </button>
       <div class="nav-section">Browse Data</div>
       <button class="nav-btn" onclick="showView('curriculum')" id="nav-curriculum">
@@ -823,7 +830,7 @@ body {
  * ============================================================
  */
 
-const APP_VERSION = 'v0.9.2';
+const APP_VERSION = 'v1.0.0';
 
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
@@ -841,6 +848,7 @@ const CSV_FILES = {
 let state = {
   students: [],
   progress: [],
+  taughtLog: [],           // { id, date, student_id, code, notes }
   curriculumCodes: [],
   standards: [],
   progressions: [],
@@ -850,7 +858,7 @@ let state = {
   selectedStudent: null,
   loading: true,
   syncing: false,
-  detailSubjectFilter: null,   // null = auto-select first available subject
+  detailSubjectFilter: null,
 };
 
 // ── GOOGLE SHEETS API ──
@@ -894,6 +902,20 @@ async function loadProgress() {
       })).filter(p => p.id);
     }
   } catch(e) { console.error('Load progress error:', e); }
+}
+
+async function loadTaughtLog() {
+  try {
+    const rows = await apiCall('getTaughtLog');
+    if (Array.isArray(rows) && rows.length > 1) {
+      state.taughtLog = rows.slice(1).map(r => ({
+        id: r[0], date: r[1], student_id: r[2], code: r[3], notes: r[4] || ''
+      })).filter(t => t.id);
+    }
+  } catch(e) {
+    // TaughtLog sheet may not exist yet — that's fine
+    console.warn('TaughtLog not loaded (sheet may not exist yet):', e);
+  }
 }
 
 async function addStudent(data) {
@@ -1046,6 +1068,7 @@ function renderView() {
     case 'student-detail': renderStudentDetail(main); break;
     case 'overview':       renderClassOverview(main); break;
     case 'bulk-assess':    renderBulkAssess(main); break;
+    case 'daily-log':      renderDailyLog(main); break;
     case 'curriculum':     renderCurriculum(main); break;
     case 'standards':      renderStandards(main); break;
     case 'progressions':   renderProgressions(main); break;
@@ -1119,6 +1142,7 @@ function renderDashboard(main) {
       <div class="topbar-title">Dashboard</div>
       <div class="topbar-actions">
         <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:0.1em">${APP_VERSION}</span>
+        <button class="btn" onclick="openDailyLogWizard()" style="border-color:var(--gold);color:var(--gold)">✦ Log Today</button>
         <button class="btn btn-primary" onclick="openAddStudentModal()">+ Add Student</button>
       </div>
     </div>
@@ -1463,6 +1487,7 @@ function renderStudentDetail(main) {
       </div>
 
       <div style="display:flex;gap:8px;flex-shrink:0">
+        <button class="btn" onclick="openBulkPrintModal()">⎙ Bulk Print</button>
         <button class="btn" onclick="openPrintOptionsModal('${s.id}')">⎙ Print Report</button>
         <button class="btn btn-primary" onclick="openBulkAssess('${s.id}')">+ Record Assessment</button>
       </div>
@@ -1481,16 +1506,23 @@ function renderStudentDetail(main) {
         ${filteredCodes.length === 0
           ? `<div class="empty-state" style="padding:40px"><div class="empty-icon">◈</div><div class="empty-title">No codes in this filter</div>${codes.length === 0 ? '<div class="empty-sub">No '+subjectFilter+' codes loaded for this year level</div>' : ''}</div>`
           : `<table class="codes-table">
-              <thead><tr><th>Code</th><th>Learning Outcome</th><th>Strand</th><th>Mastery</th><th>Date</th></tr></thead>
+              <thead><tr><th>Code</th><th>Learning Outcome</th><th>Strand</th><th>Taught</th><th>Mastery</th><th>Date</th></tr></thead>
               <tbody>
                 ${filteredCodes.map(c => {
                   const mastery = getMasteryForCode(s.id, c.Code);
                   const prog = state.progress.find(p => p.student_id === s.id && p.code === c.Code);
                   const date = prog ? prog.date.split('T')[0] : '—';
+                  const taught = wasCodeTaughtToStudent(s.id, c.Code);
+                  const taughtDates = getTaughtDatesForCode(s.id, c.Code);
                   return `<tr style="cursor:pointer" onclick="openCodeDetail('${c.Code}','${s.id}')">
                     <td><span class="code-pill" style="background:var(--surface2);color:${activeCol}">${c.Code}</span></td>
                     <td style="max-width:300px;color:var(--text2)">${c.Descriptor || c.Aspect || '—'}</td>
                     <td><span class="aspect-tag">${c.Strand || '—'}</span></td>
+                    <td onclick="event.stopPropagation()" style="white-space:nowrap">
+                      ${taught
+                        ? `<span title="Last taught: ${taughtDates[0]}" style="font-size:11px;color:var(--green);background:var(--green-dim);padding:2px 8px;border-radius:10px;cursor:default">✓ Taught</span>`
+                        : `<span style="font-size:11px;color:var(--text3)">— Not yet</span>`}
+                    </td>
                     <td onclick="event.stopPropagation()">
                       <div class="mastery-badge ${masteryClass(mastery)}" onclick="openMasteryPicker('${s.id}','${c.Code}','${mastery}')">
                         ${masteryDot(mastery)} ${mastery}
@@ -2779,21 +2811,734 @@ async function fetchAllCSVs() {
   if (total > 0) toast('Curriculum data loaded automatically', 'success');
 }
 
-// ── INIT ──
+
+// ════════════════════════════════════════════════════
+// ── DAILY LOG WIZARD ──
+// 3-step popup: Attendance → Codes Taught → Quick Mastery
+// ════════════════════════════════════════════════════
+
+let dlState = {
+  step: 1,           // 1=attendance, 2=codes, 3=mastery
+  date: '',
+  absentIds: new Set(),
+  selectedCodes: [],  // array of code strings
+  masteryMap: {},     // key: studentId+'|'+code → 'Achieved'|'Developing'|'Emerging'|null
+  aiLoading: false,
+};
+
+function openDailyLogWizard() {
+  dlState = {
+    step: 1,
+    date: new Date().toISOString().split('T')[0],
+    absentIds: new Set(),
+    selectedCodes: [],
+    masteryMap: {},
+    aiLoading: false,
+  };
+  renderDlModal();
+}
+
+function renderDlModal() {
+  const existing = document.getElementById('dl-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'dl-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:150;animation:fadeIn 0.15s ease';
+
+  const steps = ['Attendance','Codes Taught','Quick Mastery'];
+  const stepBar = steps.map((s, i) => {
+    const n = i + 1;
+    const active  = dlState.step === n;
+    const done    = dlState.step > n;
+    const col     = done ? 'var(--green)' : active ? 'var(--blue)' : 'var(--text3)';
+    const bg      = done ? 'var(--green-dim)' : active ? 'var(--blue-dim)' : 'var(--surface2)';
+    return `<div style="display:flex;align-items:center;gap:6px;flex:1;${n < 3 ? 'margin-right:8px' : ''}">
+      <div style="width:22px;height:22px;border-radius:50%;background:${bg};border:1.5px solid ${col};display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:9px;color:${col};flex-shrink:0">${done ? '✓' : n}</div>
+      <span style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:${col}">${s}</span>
+      ${n < 3 ? `<div style="flex:1;height:1px;background:${done?'var(--green)':'var(--border2)'}"></div>` : ''}
+    </div>`;
+  }).join('');
+
+  let bodyHtml = '';
+  if (dlState.step === 1) bodyHtml = buildDlStep1();
+  else if (dlState.step === 2) bodyHtml = buildDlStep2();
+  else bodyHtml = buildDlStep3();
+
+  const isLastStep = dlState.step === 3;
+  const nextLabel  = dlState.step === 1 ? `Next → Codes (${state.students.length - dlState.absentIds.size} present)`
+    : dlState.step === 2 ? `Next → Quick Mastery (${dlState.selectedCodes.length} codes)`
+    : `✓ Save Session`;
+
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:640px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,0.5);animation:slideUp 0.2s ease">
+      <!-- Header -->
+      <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div style="font-family:'Fraunces',serif;font-size:17px">Log Teaching Session</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="date" value="${dlState.date}" onchange="dlState.date=this.value"
+              style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:4px 8px;color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;outline:none">
+            <button onclick="closeDlModal()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1">✕</button>
+          </div>
+        </div>
+        <!-- Step bar -->
+        <div style="display:flex;align-items:center">${stepBar}</div>
+      </div>
+      <!-- Body -->
+      <div style="flex:1;overflow-y:auto;padding:18px 22px" id="dl-body">
+        ${bodyHtml}
+      </div>
+      <!-- Footer -->
+      <div style="padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-shrink:0">
+        <button onclick="closeDlModal()" style="padding:8px 18px;border-radius:6px;border:1px solid var(--border2);background:none;color:var(--text3);font-family:'Instrument Sans',sans-serif;font-size:13px;cursor:pointer">
+          ${dlState.step === 1 ? 'Dismiss' : '← Back'}
+        </button>
+        <div style="display:flex;gap:8px">
+          ${dlState.step === 3 ? `<button onclick="dlSkipMastery()" style="padding:8px 18px;border-radius:6px;border:1px solid var(--border2);background:none;color:var(--text3);font-family:'Instrument Sans',sans-serif;font-size:13px;cursor:pointer">Skip mastery</button>` : ''}
+          <button onclick="dlNext()" style="padding:8px 20px;border-radius:6px;border:none;background:var(--blue);color:#0f1117;font-family:'Instrument Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">
+            ${nextLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  // Wire up step-specific events after render
+  if (dlState.step === 2) wireDlStep2Events();
+}
+
+function closeDlModal() {
+  const el = document.getElementById('dl-overlay');
+  if (el) el.remove();
+}
+
+// ── STEP 1: ATTENDANCE ──
+function buildDlStep1() {
+  const sorted = [...state.students].sort((a,b) => a.last_name.localeCompare(b.last_name));
+  const presentCount = sorted.length - dlState.absentIds.size;
+  return `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Tap any student to mark them <strong style="color:var(--rust)">absent</strong>. Everyone else is present.</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text3)">${presentCount} present · ${dlState.absentIds.size} absent</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="dlMarkAll(false)" style="padding:3px 10px;border-radius:4px;border:1px solid var(--border2);background:none;color:var(--text3);font-size:11px;cursor:pointer">All present</button>
+        <button onclick="dlMarkAll(true)" style="padding:3px 10px;border-radius:4px;border:1px solid var(--border2);background:none;color:var(--text3);font-size:11px;cursor:pointer">All absent</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px" id="dl-attendance-grid">
+      ${sorted.map((s,i) => {
+        const absent = dlState.absentIds.has(s.id);
+        return `<div onclick="dlToggleAbsent('${s.id}')" id="dl-att-${s.id}"
+          style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;border:1.5px solid ${absent?'var(--rust)':'var(--border)'};background:${absent?'var(--rust-dim)':'none'};cursor:pointer;transition:all 0.12s;user-select:none">
+          <div class="sc-avatar ${getAvClass(i)}" style="width:26px;height:26px;font-size:11px;flex-shrink:0;${absent?'opacity:0.4':''}">${getInitials(s)}</div>
+          <div style="font-size:12px;font-weight:600;color:${absent?'var(--rust)':'var(--text)'};line-height:1.2">${s.first_name}<br><span style="font-weight:400;font-size:10px;color:var(--text3)">${s.last_name}</span></div>
+          ${absent ? `<div style="margin-left:auto;font-size:10px;color:var(--rust)">✗</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function dlToggleAbsent(id) {
+  if (dlState.absentIds.has(id)) dlState.absentIds.delete(id);
+  else dlState.absentIds.add(id);
+  // Re-render just the card
+  const el = document.getElementById('dl-att-' + id);
+  if (!el) return;
+  const s = state.students.find(x => x.id === id);
+  if (!s) return;
+  const i = state.students.indexOf(s);
+  const absent = dlState.absentIds.has(id);
+  el.style.border = `1.5px solid ${absent ? 'var(--rust)' : 'var(--border)'}`;
+  el.style.background = absent ? 'var(--rust-dim)' : 'none';
+  el.innerHTML = `
+    <div class="sc-avatar ${getAvClass(i)}" style="width:26px;height:26px;font-size:11px;flex-shrink:0;${absent?'opacity:0.4':''}">${getInitials(s)}</div>
+    <div style="font-size:12px;font-weight:600;color:${absent?'var(--rust)':'var(--text)'};line-height:1.2">${s.first_name}<br><span style="font-weight:400;font-size:10px;color:var(--text3)">${s.last_name}</span></div>
+    ${absent ? `<div style="margin-left:auto;font-size:10px;color:var(--rust)">✗</div>` : ''}
+  `;
+  // Update footer count
+  const footer = document.querySelector('#dl-overlay button[onclick="dlNext()"]');
+  const presentCount = state.students.length - dlState.absentIds.size;
+  if (footer) footer.textContent = `Next → Codes (${presentCount} present)`;
+  // Update header count
+  const countEl = document.querySelector('#dl-body div[style*="DM Mono"]');
+  if (countEl) countEl.textContent = `${presentCount} present · ${dlState.absentIds.size} absent`;
+}
+
+function dlMarkAll(absent) {
+  if (absent) state.students.forEach(s => dlState.absentIds.add(s.id));
+  else dlState.absentIds.clear();
+  document.getElementById('dl-body').innerHTML = buildDlStep1();
+  const presentCount = state.students.length - dlState.absentIds.size;
+  const footer = document.querySelector('#dl-overlay button[onclick="dlNext()"]');
+  if (footer) footer.textContent = `Next → Codes (${presentCount} present)`;
+}
+
+// ── STEP 2: CODES TAUGHT ──
+function buildDlStep2() {
+  const availSubjects = [...new Set(state.curriculumCodes.map(c => c.Subject).filter(Boolean))].sort();
+  const presenterCount = state.students.length - dlState.absentIds.size;
+
+  return `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">
+      Select the curriculum codes taught today to <strong style="color:var(--text)">${presenterCount} present students</strong>.
+      Search, browse by subject/strand, or describe the lesson and let AI suggest codes.
+    </div>
+
+    <!-- AI describe box -->
+    <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--purple);margin-bottom:8px">✦ AI Code Suggester</div>
+      <div style="display:flex;gap:8px">
+        <input id="dl-ai-input" placeholder="Describe what you taught today… e.g. 'we practised writing narrative openers and discussed character description'"
+          style="flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:8px 12px;color:var(--text);font-size:12px;outline:none;font-family:'Instrument Sans',sans-serif"
+          onkeydown="if(event.key==='Enter')dlAISuggest()">
+        <button onclick="dlAISuggest()" id="dl-ai-btn"
+          style="padding:8px 14px;border-radius:6px;border:1px solid var(--purple);background:var(--purple-dim);color:var(--purple);font-size:12px;cursor:pointer;white-space:nowrap;font-family:'Instrument Sans',sans-serif">
+          Suggest
+        </button>
+      </div>
+      <div id="dl-ai-results" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Filters -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+      <div style="position:relative;flex:1;min-width:160px">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px">⌕</span>
+        <input id="dl-code-search" placeholder="Search codes…"
+          style="width:100%;padding:6px 10px 6px 30px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box"
+          oninput="dlFilterCodes()">
+      </div>
+      <select id="dl-subj-filter" onchange="dlFilterCodes()"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:6px 8px;color:var(--text2);font-size:12px;cursor:pointer;outline:none">
+        <option value="all">All subjects</option>
+        ${availSubjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+      </select>
+      <select id="dl-strand-filter" onchange="dlFilterCodes()"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:6px 8px;color:var(--text2);font-size:12px;cursor:pointer;outline:none">
+        <option value="all">All strands</option>
+      </select>
+      <select id="dl-year-filter" onchange="dlFilterCodes()"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:6px 8px;color:var(--text2);font-size:12px;cursor:pointer;outline:none">
+        <option value="all">All years</option>
+        ${['Foundation','Year 1','Year 2','Year 3','Year 4','Year 5','Year 6'].map(y => `<option value="${y}">${y}</option>`).join('')}
+      </select>
+    </div>
+
+    <!-- Selected chips -->
+    <div id="dl-selected-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;min-height:26px">
+      ${buildDlSelectedChips()}
+    </div>
+
+    <!-- Code list -->
+    <div id="dl-code-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:6px">
+      ${buildDlCodeListHtml(state.curriculumCodes.slice(0,80))}
+    </div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);margin-top:6px" id="dl-code-count">
+      Showing ${Math.min(80, state.curriculumCodes.length)} of ${state.curriculumCodes.length} codes — use filters or search to narrow
+    </div>
+  `;
+}
+
+function wireDlStep2Events() {
+  // Pre-filter to student's year if all students are same year
+  const years = [...new Set(
+    state.students.filter(s => !dlState.absentIds.has(s.id)).map(s => {
+      const YLM = {'F':'Foundation','1':'Year 1','2':'Year 2','3':'Year 3','4':'Year 4','5':'Year 5','6':'Year 6'};
+      return YLM[normaliseYear(s.year_level)] || s.year_level;
+    })
+  )];
+  if (years.length === 1) {
+    const yr = document.getElementById('dl-year-filter');
+    if (yr) { yr.value = years[0]; dlFilterCodes(); }
+  }
+}
+
+function buildDlSelectedChips() {
+  if (!dlState.selectedCodes.length) return '<span style="font-size:11px;color:var(--text3)">No codes selected yet</span>';
+  return dlState.selectedCodes.map(code => {
+    const cd = state.curriculumCodes.find(c => c.Code === code);
+    return `<div style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-dim);border:1px solid var(--blue);border-radius:4px;padding:3px 8px;font-size:11px;color:var(--blue)">
+      <span style="font-family:'DM Mono',monospace">${code}</span>
+      ${cd ? `<span style="color:var(--text3);font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(cd.Strand||'').slice(0,20)}</span>` : ''}
+      <button onclick="dlToggleCode('${code}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function buildDlCodeListHtml(codes) {
+  if (!codes.length) return '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No codes match your filters</div>';
+  return codes.map(c => {
+    const selected = dlState.selectedCodes.includes(c.Code);
+    return `<div onclick="dlToggleCode('${c.Code}')" data-dl-code="${c.Code}"
+      style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s;${selected?'background:var(--blue-dim);':''}"
+      onmouseover="if(!${selected})this.style.background='var(--surface2)'" onmouseout="if(!${selected})this.style.background='transparent'">
+      <div style="width:16px;height:16px;border-radius:3px;border:1.5px solid ${selected?'var(--blue)':'var(--border2)'};background:${selected?'var(--blue)':'none'};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">
+        ${selected ? '<span style="color:#0f1117;font-size:10px;font-weight:700">✓</span>' : ''}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-family:'DM Mono',monospace;font-size:10px;color:${selected?'var(--blue)':'var(--text3)'}">${c.Code}</span>
+          <span style="font-size:9px;background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--text3)">${c.Subject||''}</span>
+          <span style="font-size:9px;color:var(--text3)">${c.Strand||''}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.4;margin-top:2px">${c.Descriptor||c.Aspect||'—'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function dlToggleCode(code) {
+  const idx = dlState.selectedCodes.indexOf(code);
+  if (idx >= 0) dlState.selectedCodes.splice(idx, 1);
+  else dlState.selectedCodes.push(code);
+  // Update chips
+  const chips = document.getElementById('dl-selected-chips');
+  if (chips) chips.innerHTML = buildDlSelectedChips();
+  // Update row highlight
+  const row = document.querySelector(`[data-dl-code="${code}"]`);
+  if (row) {
+    const selected = dlState.selectedCodes.includes(code);
+    row.style.background = selected ? 'var(--blue-dim)' : 'transparent';
+    const box = row.querySelector('div');
+    if (box) {
+      box.style.borderColor = selected ? 'var(--blue)' : 'var(--border2)';
+      box.style.background  = selected ? 'var(--blue)' : 'none';
+      box.innerHTML = selected ? '<span style="color:#0f1117;font-size:10px;font-weight:700">✓</span>' : '';
+    }
+  }
+  // Update footer
+  const btn = document.querySelector('#dl-overlay button[onclick="dlNext()"]');
+  if (btn) btn.textContent = `Next → Quick Mastery (${dlState.selectedCodes.length} codes)`;
+}
+
+function dlFilterCodes() {
+  const q      = (document.getElementById('dl-code-search')?.value || '').toLowerCase();
+  const subj   = document.getElementById('dl-subj-filter')?.value || 'all';
+  const strand = document.getElementById('dl-strand-filter')?.value || 'all';
+  const year   = document.getElementById('dl-year-filter')?.value || 'all';
+
+  // Update strand options when subject changes
+  const strandSel = document.getElementById('dl-strand-filter');
+  if (strandSel && subj !== 'all') {
+    const strands = [...new Set(state.curriculumCodes.filter(c => c.Subject === subj).map(c => c.Strand).filter(Boolean))].sort();
+    strandSel.innerHTML = `<option value="all">All strands</option>${strands.map(s => `<option value="${s}">${s}</option>`).join('')}`;
+  }
+
+  const filtered = state.curriculumCodes.filter(c => {
+    if (subj   !== 'all' && c.Subject !== subj) return false;
+    if (strand !== 'all' && c.Strand  !== strand) return false;
+    if (year   !== 'all' && (c['Year Level']||'').trim() !== year) return false;
+    if (q && !(
+      (c.Code||'').toLowerCase().includes(q) ||
+      (c.Descriptor||'').toLowerCase().includes(q) ||
+      (c.Strand||'').toLowerCase().includes(q)
+    )) return false;
+    return true;
+  }).slice(0, 100);
+
+  const list = document.getElementById('dl-code-list');
+  const count = document.getElementById('dl-code-count');
+  if (list) list.innerHTML = buildDlCodeListHtml(filtered);
+  if (count) count.textContent = `Showing ${filtered.length} codes`;
+}
+
+// ── AI SUGGESTER ──
+async function dlAISuggest() {
+  const input = document.getElementById('dl-ai-input');
+  const btn   = document.getElementById('dl-ai-btn');
+  const results = document.getElementById('dl-ai-results');
+  const text = input?.value?.trim();
+  if (!text) { toast('Describe what you taught first', 'error'); return; }
+
+  btn.textContent = '…'; btn.disabled = true;
+  results.innerHTML = `<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Analysing lesson…</div>`;
+
+  // Build a compact list of codes to send to Claude
+  const codeList = state.curriculumCodes.slice(0, 400).map(c =>
+    `${c.Code}|${c.Subject}|${c.Strand}|${(c.Descriptor||c.Aspect||'').slice(0,80)}`
+  ).join('\n');
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 400,
+        system: `You are a helpful assistant for an Australian primary school teacher using the Australian Curriculum v9.
+Given a lesson description and a list of curriculum codes, return the 3-6 most relevant codes as JSON.
+Respond ONLY with valid JSON in this exact format, no preamble, no backticks:
+{"codes":["CODE1","CODE2","CODE3"],"reasoning":"Brief one-sentence explanation"}`,
+        messages: [{
+          role: 'user',
+          content: `Lesson description: "${text}"\n\nAvailable codes (Code|Subject|Strand|Descriptor):\n${codeList}`
+        }]
+      })
+    });
+    const data = await resp.json();
+    const raw = data.content?.[0]?.text || '{}';
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    const suggestedCodes = (parsed.codes || []).filter(code =>
+      state.curriculumCodes.some(c => c.Code === code)
+    );
+
+    if (!suggestedCodes.length) {
+      results.innerHTML = `<div style="font-size:11px;color:var(--text3)">No matching codes found — try rephrasing or use the search below.</div>`;
+    } else {
+      results.innerHTML = `
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-style:italic">${parsed.reasoning || ''}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          ${suggestedCodes.map(code => {
+            const cd = state.curriculumCodes.find(c => c.Code === code);
+            const selected = dlState.selectedCodes.includes(code);
+            return `<button onclick="dlAddAISuggested('${code}')" id="dl-ai-chip-${code}"
+              style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:4px;
+              border:1px solid ${selected?'var(--green)':'var(--purple)'};
+              background:${selected?'var(--green-dim)':'var(--purple-dim)'};
+              color:${selected?'var(--green)':'var(--purple)'};
+              font-size:11px;cursor:pointer;font-family:'DM Mono',monospace">
+              ${selected?'✓ ':'+\u00a0'}${code}
+              ${cd ? `<span style="font-size:10px;color:var(--text3);font-family:'Instrument Sans',sans-serif">${(cd.Strand||'').slice(0,20)}</span>` : ''}
+            </button>`;
+          }).join('')}
+        </div>`;
+    }
+  } catch(e) {
+    results.innerHTML = `<div style="font-size:11px;color:var(--rust)">AI suggestion failed — use search and filters below.</div>`;
+  }
+  btn.textContent = 'Suggest'; btn.disabled = false;
+}
+
+function dlAddAISuggested(code) {
+  if (!dlState.selectedCodes.includes(code)) {
+    dlState.selectedCodes.push(code);
+  } else {
+    dlState.selectedCodes.splice(dlState.selectedCodes.indexOf(code), 1);
+  }
+  // Update the chip button
+  const chip = document.getElementById('dl-ai-chip-' + code);
+  if (chip) {
+    const selected = dlState.selectedCodes.includes(code);
+    chip.style.borderColor = selected ? 'var(--green)' : 'var(--purple)';
+    chip.style.background  = selected ? 'var(--green-dim)' : 'var(--purple-dim)';
+    chip.style.color       = selected ? 'var(--green)' : 'var(--purple)';
+  }
+  // Update selected chips row
+  const chips = document.getElementById('dl-selected-chips');
+  if (chips) chips.innerHTML = buildDlSelectedChips();
+  const btn = document.querySelector('#dl-overlay button[onclick="dlNext()"]');
+  if (btn) btn.textContent = `Next → Quick Mastery (${dlState.selectedCodes.length} codes)`;
+}
+
+// ── STEP 3: QUICK MASTERY ──
+function buildDlStep3() {
+  const presentStudents = state.students.filter(s => !dlState.absentIds.has(s.id))
+    .sort((a,b) => a.last_name.localeCompare(b.last_name));
+  const codes = dlState.selectedCodes;
+
+  if (!codes.length) return `<div class="empty-state" style="padding:40px"><div class="empty-icon">◈</div><div class="empty-title">No codes selected</div><div class="empty-sub">Go back and select codes taught today</div></div>`;
+
+  const masteryColours = {
+    'Achieved':  ['var(--green)', 'var(--green-dim)'],
+    'Developing':['var(--gold)',  'var(--gold-dim)'],
+    'Emerging':  ['var(--rust)',  'var(--rust-dim)'],
+  };
+
+  return `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">
+      Optionally record mastery for today's session. This is on top of marking codes as taught. Leave blank to skip for any student/code.
+    </div>
+    ${codes.map(code => {
+      const cd = state.curriculumCodes.find(c => c.Code === code);
+      return `<div style="margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--blue)">${code}</span>
+          <span style="font-size:11px;color:var(--text2)">${cd ? (cd.Descriptor||cd.Aspect||'').slice(0,70)+'…' : ''}</span>
+          <span style="font-size:9px;background:var(--surface2);padding:1px 6px;border-radius:3px;color:var(--text3);flex-shrink:0">${cd?.Strand||''}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          ${presentStudents.map((s,si) => {
+            const key = s.id + '|' + code;
+            const current = dlState.masteryMap[key] || null;
+            return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+              <div class="sc-avatar ${getAvClass(si)}" style="width:22px;height:22px;font-size:9px;flex-shrink:0">${getInitials(s)}</div>
+              <div style="font-size:12px;color:var(--text2);width:120px;flex-shrink:0">${s.first_name} ${s.last_name}</div>
+              <div style="display:flex;gap:4px">
+                ${['Achieved','Developing','Emerging'].map(m => {
+                  const [col, bg] = masteryColours[m];
+                  const active = current === m;
+                  return `<button onclick="dlSetMastery('${s.id}','${code}','${m}')"
+                    style="padding:3px 10px;border-radius:4px;border:1px solid ${active?col:'var(--border2)'};background:${active?bg:'none'};color:${active?col:'var(--text3)'};font-size:10px;cursor:pointer;transition:all 0.1s">
+                    ${m}
+                  </button>`;
+                }).join('')}
+                ${current ? `<button onclick="dlSetMastery('${s.id}','${code}',null)"
+                  style="padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:none;color:var(--text3);font-size:10px;cursor:pointer">✕</button>` : ''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function dlSetMastery(studentId, code, mastery) {
+  const key = studentId + '|' + code;
+  if (mastery === null) delete dlState.masteryMap[key];
+  else dlState.masteryMap[key] = mastery;
+  // Re-render step 3 body only
+  const body = document.getElementById('dl-body');
+  if (body) body.innerHTML = buildDlStep3();
+}
+
+function dlSkipMastery() {
+  dlState.masteryMap = {};
+  saveDailyLog();
+}
+
+// ── NAVIGATION ──
+function dlNext() {
+  if (dlState.step === 1) {
+    dlState.step = 2;
+    renderDlModal();
+  } else if (dlState.step === 2) {
+    if (!dlState.selectedCodes.length) { toast('Select at least one code taught today', 'error'); return; }
+    dlState.step = 3;
+    renderDlModal();
+  } else {
+    saveDailyLog();
+  }
+}
+
+// ── SAVE ──
+async function saveDailyLog() {
+  closeDlModal();
+  const presentStudents = state.students.filter(s => !dlState.absentIds.has(s.id));
+  const entries = [];
+
+  presentStudents.forEach(s => {
+    dlState.selectedCodes.forEach(code => {
+      entries.push({
+        date: dlState.date,
+        student_id: s.id,
+        code,
+        notes: dlState.masteryMap[s.id + '|' + code] || ''
+      });
+    });
+  });
+
+  if (!entries.length) { toast('Nothing to save', 'error'); return; }
+
+  toast(`Saving ${entries.length} taught records…`, 'success');
+  setSyncing(true);
+  let saved = 0;
+
+  try {
+    const result = await apiCall('saveTaughtLog', { entries });
+    if (result.success) {
+      // Add to local state
+      entries.forEach((e, i) => {
+        state.taughtLog.push({
+          id: result.ids ? result.ids[i] : ('local_' + Date.now() + '_' + i),
+          date: e.date,
+          student_id: e.student_id,
+          code: e.code,
+          notes: e.notes
+        });
+      });
+      saved = entries.length;
+    }
+  } catch(err) {
+    // Fallback: save locally so session isn't lost
+    entries.forEach((e, i) => {
+      state.taughtLog.push({ id: 'local_' + Date.now() + '_' + i, ...e });
+    });
+    saved = entries.length;
+    toast('Saved locally (Sheets sync failed)', 'error');
+  }
+
+  // Also save any mastery ratings through the existing progress flow
+  const masteryEntries = Object.entries(dlState.masteryMap);
+  for (const [key, mastery] of masteryEntries) {
+    const [studentId, code] = key.split('|');
+    if (!mastery) continue;
+    try {
+      await saveProgress({
+        student_id: studentId,
+        content_descriptor_code: code,
+        mastery_level: mastery,
+        date_assessed: dlState.date,
+        teacher_notes: 'Logged via daily session'
+      });
+    } catch(e) { console.warn('Could not save mastery for', key); }
+  }
+
+  setSyncing(false);
+  checkDailyLogBadge();
+  toast(`✓ Session logged — ${saved} codes taught to ${presentStudents.length} students`, 'success');
+  if (state.currentView === 'dashboard') renderView();
+}
+
+// ── TAUGHT HELPERS ──
+function wasCodeTaughtToStudent(studentId, code) {
+  return state.taughtLog.some(t => t.student_id === studentId && t.code === code);
+}
+
+function getTaughtDatesForCode(studentId, code) {
+  return state.taughtLog
+    .filter(t => t.student_id === studentId && t.code === code)
+    .map(t => t.date)
+    .sort()
+    .reverse();
+}
+
+function getUntaughtCodes(studentId, yearLevel) {
+  const YLM = {'F':'Foundation','1':'Year 1','2':'Year 2','3':'Year 3','4':'Year 4','5':'Year 5','6':'Year 6'};
+  const csvYear = YLM[normaliseYear(yearLevel)] || yearLevel;
+  return state.curriculumCodes.filter(c =>
+    (c['Year Level']||'').trim() === csvYear &&
+    !wasCodeTaughtToStudent(studentId, c.Code)
+  );
+}
+
+// ── SESSION HISTORY VIEW ──
+function renderDailyLog(main) {
+  // Group log entries by date
+  const byDate = {};
+  state.taughtLog.forEach(t => {
+    if (!byDate[t.date]) byDate[t.date] = [];
+    byDate[t.date].push(t);
+  });
+  const dates = Object.keys(byDate).sort().reverse();
+
+  main.innerHTML = `
+    <div class="topbar" style="flex-wrap:wrap;gap:8px">
+      <div class="topbar-title">Session History</div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn" style="border-color:var(--gold);color:var(--gold)" onclick="openDailyLogWizard()">✦ Log Today</button>
+        <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);align-self:center">${APP_VERSION}</span>
+      </div>
+    </div>
+    <div class="content">
+      ${dates.length === 0
+        ? `<div class="empty-state" style="padding:80px">
+            <div class="empty-icon">◷</div>
+            <div class="empty-title">No sessions logged yet</div>
+            <div class="empty-sub">Use "Log Today" each day to record which codes were taught and to whom.</div>
+            <button class="btn btn-primary" style="margin-top:12px" onclick="openDailyLogWizard()">✦ Log Today</button>
+          </div>`
+        : dates.map(date => {
+            const entries = byDate[date];
+            const codes   = [...new Set(entries.map(e => e.code))];
+            const studs   = [...new Set(entries.map(e => e.student_id))];
+            const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-AU', {weekday:'long',day:'numeric',month:'long'});
+            const today = new Date().toISOString().split('T')[0];
+            return `
+              <div class="card" style="margin-bottom:14px">
+                <div class="card-head" style="cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div>
+                      <div class="card-title">${dateLabel} ${date===today?'<span style="font-family:\'DM Mono\',monospace;font-size:9px;background:var(--gold-dim);color:var(--gold);padding:1px 6px;border-radius:4px;margin-left:6px">TODAY</span>':''}</div>
+                      <div style="font-size:11px;color:var(--text3);margin-top:2px">${codes.length} codes · ${studs.length} students</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    ${codes.slice(0,6).map(code => `<span style="font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:3px;background:var(--blue-dim);color:var(--blue)">${code}</span>`).join('')}
+                    ${codes.length > 6 ? `<span style="font-size:10px;color:var(--text3)">+${codes.length-6} more</span>` : ''}
+                  </div>
+                </div>
+                <div style="padding:12px 18px">
+                  <table style="width:100%;border-collapse:collapse;font-size:11px">
+                    <thead><tr>
+                      <th style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.1em">Student</th>
+                      <th style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.1em">Codes Taught</th>
+                      <th style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:0.1em">Mastery Logged</th>
+                    </tr></thead>
+                    <tbody>
+                      ${studs.map(sid => {
+                        const s = state.students.find(x => x.id === sid);
+                        if (!s) return '';
+                        const sEntries = entries.filter(e => e.student_id === sid);
+                        const sCodes = sEntries.map(e => e.code);
+                        const sMastery = sEntries.filter(e => e.notes && e.notes !== '');
+                        return `<tr style="border-bottom:1px solid var(--border)">
+                          <td style="padding:6px 8px;color:var(--text2)">${s.first_name} ${s.last_name}</td>
+                          <td style="padding:6px 8px">
+                            <div style="display:flex;gap:4px;flex-wrap:wrap">
+                              ${sCodes.map(c => `<span style="font-family:'DM Mono',monospace;font-size:9px;padding:1px 5px;border-radius:3px;background:var(--blue-dim);color:var(--blue)">${c}</span>`).join('')}
+                            </div>
+                          </td>
+                          <td style="padding:6px 8px">
+                            ${sMastery.length
+                              ? sMastery.map(e => `<span style="font-size:10px;color:${e.notes==='Achieved'?'var(--green)':e.notes==='Developing'?'var(--gold)':'var(--rust)'}">${e.notes}</span>`).join(', ')
+                              : `<span style="color:var(--text3);font-size:10px">—</span>`}
+                          </td>
+                        </tr>`;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>`;
+          }).join('')
+      }
+    </div>
+  `;
+}
+
+// ── Apps Script note (shown in console) ──
+console.info(
+  '%cClassTracker — Apps Script update needed for TaughtLog\n\n' +
+  'Add a sheet called "TaughtLog" with columns:\n' +
+  'A: id  B: date  C: student_id  D: code  E: notes\n\n' +
+  'Add these functions to your Apps Script:\n\n' +
+  'function getTaughtLog() {\n' +
+  '  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TaughtLog").getDataRange().getValues();\n' +
+  '}\n\n' +
+  'function saveTaughtLog(data) {\n' +
+  '  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TaughtLog");\n' +
+  '  var ids = [];\n' +
+  '  data.entries.forEach(function(e) {\n' +
+  '    var id = Utilities.getUuid();\n' +
+  '    sheet.appendRow([id, e.date, e.student_id, e.code, e.notes || ""]);\n' +
+  '    ids.push(id);\n' +
+  '  });\n' +
+  '  return { success: true, ids: ids };\n' +
+  '}\n\n' +
+  'Then redeploy your web app.',
+  'color:#60a5fa;font-family:monospace'
+);
+
 async function init() {
-  // Update sidebar version
   const verEl = document.getElementById('sidebar-version');
   if (verEl) verEl.textContent = APP_VERSION;
   try {
-    await Promise.all([loadStudents(), loadProgress(), fetchAllCSVs()]);
+    await Promise.all([loadStudents(), loadProgress(), loadTaughtLog(), fetchAllCSVs()]);
     state.loading = false;
     renderView();
+    // Show "NEW" badge if no session logged today
+    checkDailyLogBadge();
+    // Auto-popup if nothing logged today
+    const today = new Date().toISOString().split('T')[0];
+    const loggedToday = state.taughtLog.some(t => t.date === today);
+    if (!loggedToday) {
+      setTimeout(() => openDailyLogWizard(), 1200);
+    }
   } catch(e) {
     console.error('Init error:', e);
     state.loading = false;
     renderView();
     toast('Could not connect to Google Sheets. Check your connection.', 'error');
   }
+}
+
+function checkDailyLogBadge() {
+  const today = new Date().toISOString().split('T')[0];
+  const loggedToday = state.taughtLog.some(t => t.date === today);
+  const badge = document.getElementById('daily-log-badge');
+  if (badge) badge.style.display = loggedToday ? 'none' : 'inline';
 }
 
 init();
