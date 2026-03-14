@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version 1.0.2 -->
+<!-- Version 1.0.3 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -729,7 +729,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">P–6 · All Subjects</div>
-      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.2</div>
+      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.3</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -830,7 +830,7 @@ body {
  * ============================================================
  */
 
-const APP_VERSION = 'v1.0.2';
+const APP_VERSION = 'v1.0.3';
 
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
@@ -3075,10 +3075,13 @@ function buildDlSelectedChips() {
   if (!dlState.selectedCodes.length) return '<span style="font-size:11px;color:var(--text3)">No codes selected yet</span>';
   return dlState.selectedCodes.map(code => {
     const cd = state.curriculumCodes.find(c => c.Code === code);
-    return `<div style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-dim);border:1px solid var(--blue);border-radius:4px;padding:3px 8px;font-size:11px;color:var(--blue)">
+    // Colour chip by subject
+    const subjColours = { 'English':'var(--blue)','Mathematics':'var(--green)','Science':'var(--teal)','HASS':'var(--gold)' };
+    const col = subjColours[cd?.Subject] || 'var(--blue)';
+    return `<div style="display:inline-flex;align-items:center;gap:5px;background:${col}22;border:1px solid ${col};border-radius:4px;padding:3px 8px;font-size:11px;color:${col}">
       <span style="font-family:'DM Mono',monospace">${code}</span>
-      ${cd ? `<span style="color:var(--text3);font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(cd.Strand||'').slice(0,20)}</span>` : ''}
-      <button onclick="dlToggleCode('${code}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button>
+      ${cd ? `<span style="color:var(--text3);font-size:10px">${cd.Subject ? cd.Subject.slice(0,4).toUpperCase() : ''}</span>` : ''}
+      <button onclick="dlToggleCode('${code}')" style="background:none;border:none;color:${col};cursor:pointer;font-size:12px;padding:0;line-height:1;opacity:0.7">✕</button>
     </div>`;
   }).join('');
 }
@@ -3183,69 +3186,69 @@ async function dlAISuggest() {
   btn.textContent = '…'; btn.disabled = true;
   results.innerHTML = `<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Analysing lesson…</div>`;
 
-  // Use the currently filtered codes for better relevance
-  const subj   = document.getElementById('dl-subj-filter')?.value || 'all';
-  const year   = document.getElementById('dl-year-filter')?.value || 'all';
-  const relevantCodes = state.curriculumCodes
-    .filter(c => {
-      if (subj !== 'all' && c.Subject !== subj) return false;
-      if (year !== 'all' && (c['Year Level']||'').trim() !== year) return false;
-      return true;
-    })
-    .slice(0, 500);
+  // Use currently filtered subject/year for relevance
+  const subj = document.getElementById('dl-subj-filter')?.value || 'all';
+  const year = document.getElementById('dl-year-filter')?.value || 'all';
+
+  const relevantCodes = state.curriculumCodes.filter(c => {
+    if (subj !== 'all' && c.Subject !== subj) return false;
+    if (year !== 'all' && (c['Year Level']||'').trim() !== year) return false;
+    return true;
+  }).slice(0, 500);
 
   const codeList = relevantCodes.map(c =>
     `${c.Code}|${c.Subject}|${c.Strand||''}|${(c.Descriptor||c.Aspect||'').slice(0,90)}`
   ).join('\n');
 
   const yearContext = year !== 'all' ? ` for ${year}` : '';
+  const prompt = `You are helping an Australian primary school teacher identify curriculum codes${yearContext}.
+
+Lesson description: "${text}"
+
+Available codes (Code|Subject|Strand|Descriptor):
+${codeList}
+
+Return ONLY valid JSON with no preamble or backticks:
+{"codes":["CODE1","CODE2","CODE3"],"reasoning":"One sentence explanation"}
+
+Pick the 3-8 most relevant codes.`;
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 300,
-        system: `You are a helpful assistant for an Australian primary school teacher using the Australian Curriculum v9${yearContext}.
-Given a lesson description and a list of curriculum codes, identify the 3-8 most relevant codes.
-Respond ONLY with valid JSON, no preamble, no markdown backticks:
-{"codes":["CODE1","CODE2"],"reasoning":"One sentence explanation"}`,
-        messages: [{
-          role: 'user',
-          content: `Lesson: "${text}"\n\nCodes (Code|Subject|Strand|Descriptor):\n${codeList}`
-        }]
-      })
-    });
+    // Route through Apps Script proxy — add claudeSuggest action to your Apps Script
+    const result = await apiCall('claudeSuggest', { prompt });
 
-    if (!resp.ok) throw new Error('API ' + resp.status);
-    const data = await resp.json();
-    const raw  = (data.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(raw);
-    const suggestedCodes = (parsed.codes || []).filter(code =>
-      state.curriculumCodes.some(c => c.Code === code)
-    );
+    let suggestedCodes = [];
+    let reasoning = '';
+
+    if (result && result.codes) {
+      // Apps Script returned parsed result
+      suggestedCodes = result.codes.filter(code => state.curriculumCodes.some(c => c.Code === code));
+      reasoning = result.reasoning || '';
+    } else if (result && result.text) {
+      // Apps Script returned raw text — parse it
+      const parsed = JSON.parse(result.text.replace(/```json|```/g,'').trim());
+      suggestedCodes = (parsed.codes||[]).filter(code => state.curriculumCodes.some(c => c.Code === code));
+      reasoning = parsed.reasoning || '';
+    } else {
+      throw new Error('No result from Apps Script');
+    }
 
     if (!suggestedCodes.length) {
       results.innerHTML = `<div style="font-size:11px;color:var(--text3)">No matching codes found — try rephrasing or use the filters below.</div>`;
     } else {
       results.innerHTML = `
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-style:italic">${parsed.reasoning || ''}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-style:italic">${reasoning}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px">
           ${suggestedCodes.map(code => {
             const cd = state.curriculumCodes.find(c => c.Code === code);
             const selected = dlState.selectedCodes.includes(code);
             return `<button onclick="dlAddAISuggested('${code}')" id="dl-ai-chip-${code}"
-              style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:4px;
+              style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:5px;
               border:1px solid ${selected?'var(--green)':'var(--purple)'};
               background:${selected?'var(--green-dim)':'var(--purple-dim)'};
               color:${selected?'var(--green)':'var(--purple)'};
-              font-size:11px;cursor:pointer">
-              <span style="font-family:'DM Mono',monospace">${selected?'✓ ':''} ${code}</span>
+              font-size:11px;cursor:pointer;transition:all 0.15s">
+              <span style="font-family:'DM Mono',monospace">${selected ? '✓' : '+'} ${code}</span>
               ${cd ? `<span style="font-size:10px;color:var(--text3)">${(cd.Strand||'').slice(0,22)}</span>` : ''}
             </button>`;
           }).join('')}
@@ -3253,7 +3256,12 @@ Respond ONLY with valid JSON, no preamble, no markdown backticks:
     }
   } catch(e) {
     console.error('AI suggest error:', e);
-    results.innerHTML = `<div style="font-size:11px;color:var(--rust)">AI suggestion unavailable — use search and filters below.</div>`;
+    results.innerHTML = `<div style="font-size:11px;color:var(--rust)">
+      AI suggestion unavailable — use search and filters below.
+      <span style="color:var(--text3);display:block;margin-top:4px;font-size:10px">
+        (Add <code style="background:var(--surface2);padding:1px 4px;border-radius:3px">claudeSuggest</code> action to your Apps Script to enable AI suggestions)
+      </span>
+    </div>`;
   }
   btn.textContent = 'Suggest'; btn.disabled = false;
 }
@@ -3586,17 +3594,20 @@ function renderDailyLog(main) {
   `;
 }
 
-// ── Apps Script note (shown in console) ──
+// ── Apps Script additions needed ──
 console.info(
-  '%cClassTracker — Apps Script update needed for TaughtLog\n\n' +
-  'Add a sheet called "TaughtLog" with columns:\n' +
-  'A: id  B: date  C: student_id  D: code  E: notes\n\n' +
-  'Add these functions to your Apps Script:\n\n' +
+  '%cClassTracker — Apps Script updates needed\n\n' +
+  '1. Add a sheet called "TaughtLog" with columns:\n' +
+  '   A: id  B: date  C: student_id  D: code  E: notes\n\n' +
+  '2. Add these functions to your Apps Script:\n\n' +
   'function getTaughtLog() {\n' +
-  '  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TaughtLog").getDataRange().getValues();\n' +
+  '  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TaughtLog");\n' +
+  '  if (!sheet) return [[]];\n' +
+  '  return sheet.getDataRange().getValues();\n' +
   '}\n\n' +
   'function saveTaughtLog(data) {\n' +
   '  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TaughtLog");\n' +
+  '  if (!sheet) sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet("TaughtLog");\n' +
   '  var ids = [];\n' +
   '  data.entries.forEach(function(e) {\n' +
   '    var id = Utilities.getUuid();\n' +
@@ -3605,8 +3616,29 @@ console.info(
   '  });\n' +
   '  return { success: true, ids: ids };\n' +
   '}\n\n' +
-  'Then redeploy your web app.',
-  'color:#60a5fa;font-family:monospace'
+  'function claudeSuggest(data) {\n' +
+  '  var API_KEY = "YOUR_ANTHROPIC_API_KEY_HERE";\n' +
+  '  var response = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", {\n' +
+  '    method: "post",\n' +
+  '    headers: {\n' +
+  '      "Content-Type": "application/json",\n' +
+  '      "x-api-key": API_KEY,\n' +
+  '      "anthropic-version": "2023-06-01"\n' +
+  '    },\n' +
+  '    payload: JSON.stringify({\n' +
+  '      model: "claude-haiku-4-5-20251001",\n' +
+  '      max_tokens: 400,\n' +
+  '      messages: [{ role: "user", content: data.prompt }]\n' +
+  '    }),\n' +
+  '    muteHttpExceptions: true\n' +
+  '  });\n' +
+  '  var result = JSON.parse(response.getContentText());\n' +
+  '  var text = result.content && result.content[0] ? result.content[0].text : "{}";\n' +
+  '  try { return JSON.parse(text.replace(/```json|```/g,"").trim()); }\n' +
+  '  catch(e) { return { codes: [], reasoning: "Parse error" }; }\n' +
+  '}\n\n' +
+  '3. Redeploy your web app after adding these functions.',
+  'color:#60a5fa;font-family:monospace;font-size:11px'
 );
 
 async function init() {
