@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version 1.0.6 -->
+<!-- Version 1.0.7 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -729,7 +729,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">P–6 · All Subjects</div>
-      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.6</div>
+      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.7</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -830,7 +830,7 @@ body {
  * ============================================================
  */
 
-const APP_VERSION = 'v1.0.6';
+const APP_VERSION = 'v1.0.7';
 
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
@@ -3355,19 +3355,33 @@ Return up to 12 codes covering all subjects mentioned. Be generous — include a
 
     const groupedHtml = Object.entries(bySubject).map(([subj, items]) => {
       const col = subjColours[subj] || 'var(--text2)';
-      return `<div style="margin-bottom:8px">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:${col};text-transform:uppercase;letter-spacing:0.1em;margin-bottom:5px">${subj}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:5px">
+      return `<div style="margin-bottom:10px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:${col};text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px">${subj}</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
           ${items.map(({code, cd}) => {
             const selected = dlState.selectedCodes.includes(code);
             const btnCol = selected ? 'var(--green)' : col;
-            const btnBg  = selected ? 'var(--green-dim)' : btnCol + '22';
+            const btnBg  = selected ? 'var(--green-dim)' : 'var(--surface2)';
+            const descriptor = cd ? (cd.Descriptor || cd.Aspect || '') : '';
             return `<button onclick="dlAddAISuggested('${code}')" id="dl-ai-chip-${code}"
-              style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:6px;
-              border:2px solid ${btnCol};background:${btnBg};color:${btnCol};
-              font-size:12px;cursor:pointer;transition:all 0.15s;font-weight:600">
-              <span style="font-family:'DM Mono',monospace">${selected ? '✓' : '+'} ${code}</span>
-              ${cd ? `<span style="font-size:10px;font-weight:400;color:var(--text3)">${(cd.Strand||'').slice(0,20)}</span>` : ''}
+              style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:6px;
+              border:2px solid ${btnCol};background:${btnBg};
+              text-align:left;width:100%;cursor:pointer;transition:all 0.15s">
+              <!-- Tick / Plus indicator -->
+              <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${btnCol};
+                background:${selected?btnCol:'none'};display:flex;align-items:center;justify-content:center;
+                flex-shrink:0;margin-top:1px;font-size:11px;color:${selected?'#0f1117':btnCol}">
+                ${selected ? '✓' : '+'}
+              </div>
+              <div style="flex:1;min-width:0">
+                <!-- Code + strand row -->
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+                  <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${btnCol}">${code}</span>
+                  ${cd?.Strand ? `<span style="font-size:9px;background:${col}22;color:${col};padding:1px 6px;border-radius:3px;font-family:'DM Mono',monospace">${cd.Strand}</span>` : ''}
+                </div>
+                <!-- Full descriptor -->
+                <div style="font-size:11px;color:var(--text2);line-height:1.5">${descriptor || '—'}</div>
+              </div>
             </button>`;
           }).join('')}
         </div>
@@ -3393,15 +3407,28 @@ function dlAddAISuggested(code) {
     dlState.selectedCodes.splice(dlState.selectedCodes.indexOf(code), 1);
   }
   const selected = dlState.selectedCodes.includes(code);
+  const cd = state.curriculumCodes.find(c => c.Code === code);
+  const subjColours = {'English':'var(--blue)','Mathematics':'var(--green)','Science':'var(--teal)','HASS':'var(--gold)','Health and Physical Education':'var(--rust)','Design and Technologies':'var(--purple)','Digital Technologies':'var(--purple)'};
+  const col    = subjColours[cd?.Subject] || 'var(--purple)';
+  const btnCol = selected ? 'var(--green)' : col;
+  const btnBg  = selected ? 'var(--green-dim)' : 'var(--surface2)';
 
-  // Update the AI chip button appearance
+  // Update the card button appearance
   const chip = document.getElementById('dl-ai-chip-' + code);
   if (chip) {
-    chip.style.borderColor = selected ? 'var(--green)' : 'var(--purple)';
-    chip.style.background  = selected ? 'var(--green-dim)' : 'var(--purple-dim)';
-    chip.style.color       = selected ? 'var(--green)' : 'var(--purple)';
-    const span = chip.querySelector('span');
-    if (span) span.textContent = (selected ? '✓ ' : '+ ') + code;
+    chip.style.borderColor = btnCol;
+    chip.style.background  = btnBg;
+    // Update the circle indicator (first child div)
+    const circle = chip.querySelector('div');
+    if (circle) {
+      circle.style.borderColor = btnCol;
+      circle.style.background  = selected ? btnCol : 'none';
+      circle.style.color       = selected ? '#0f1117' : btnCol;
+      circle.textContent       = selected ? '✓' : '+';
+    }
+    // Update code text colour
+    const codeSpan = chip.querySelector('span');
+    if (codeSpan) codeSpan.style.color = btnCol;
   }
 
   // Update the selected chips row at top of code list
