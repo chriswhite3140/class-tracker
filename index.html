@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version 1.0.4 -->
+<!-- Version 1.0.6 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -729,7 +729,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">P–6 · All Subjects</div>
-      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.4</div>
+      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.6</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -830,7 +830,7 @@ body {
  * ============================================================
  */
 
-const APP_VERSION = 'v1.0.4';
+const APP_VERSION = 'v1.0.6';
 
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
@@ -2991,7 +2991,7 @@ function buildDlStep2() {
     <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 14px;margin-bottom:14px">
       <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--purple);margin-bottom:8px">✦ AI Code Suggester</div>
       <div style="display:flex;gap:8px">
-        <input id="dl-ai-input" placeholder="Describe what you taught today… e.g. 'we practised writing narrative openers and discussed character description'"
+        <input id="dl-ai-input" placeholder="Describe everything taught today across all subjects… e.g. '2 times tables and doubling, phonics blending, narrative writing openers, living vs non-living things'"
           style="flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:8px 12px;color:var(--text);font-size:12px;outline:none;font-family:'Instrument Sans',sans-serif"
           onkeydown="if(event.key==='Enter')dlAISuggest()">
         <button onclick="dlAISuggest()" id="dl-ai-btn"
@@ -3241,42 +3241,44 @@ async function dlAISuggest() {
 
   btn.textContent = '…'; btn.disabled = true;
   results.innerHTML = `<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:8px">
-    <div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Analysing lesson…
+    <div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Searching across all subjects…
   </div>`;
 
-  // Scope to current subject/year filter for relevance
-  const subj = document.getElementById('dl-subj-filter')?.value || 'all';
+  // Always search ALL subjects — only filter by year for relevance
+  // Subject filter still applies to the browse list below, but NOT to AI suggestions
   const year = document.getElementById('dl-year-filter')?.value || 'all';
   const relevantCodes = state.curriculumCodes.filter(c => {
-    if (subj !== 'all' && c.Subject !== subj) return false;
     if (year !== 'all' && (c['Year Level']||'').trim() !== year) return false;
     return true;
-  }).slice(0, 500);
+  });
 
   if (!relevantCodes.length) {
-    results.innerHTML = `<div style="font-size:11px;color:var(--text3)">No codes in scope — try changing the subject or year filter first.</div>`;
+    results.innerHTML = `<div style="font-size:11px;color:var(--text3)">No codes loaded — make sure your CSV has loaded.</div>`;
     btn.textContent = 'Suggest'; btn.disabled = false;
     return;
   }
 
   let suggestedCodes = [];
   let reasoning = '';
-  let method = 'ai'; // track which path succeeded
+  let method = 'ai';
 
   // ── Try AI via Apps Script first ──
   try {
     const yearContext = year !== 'all' ? ` for ${year}` : '';
+
+    // Send all codes across all subjects — AI picks the best regardless of subject
     const codeList = relevantCodes.map(c =>
       `${c.Code}|${c.Subject}|${c.Strand||''}|${(c.Descriptor||c.Aspect||'').slice(0,90)}`
     ).join('\n');
 
     const prompt = `You are helping an Australian primary school teacher identify Australian Curriculum v9 codes${yearContext}.
+The teacher has described everything taught in their day. Identify ALL relevant codes across ALL subjects.
 Lesson description: "${text}"
 Available codes (Code|Subject|Strand|Descriptor):
 ${codeList}
 Return ONLY valid JSON, no preamble, no backticks:
-{"codes":["CODE1","CODE2"],"reasoning":"One sentence explanation"}
-Pick the 3-8 most relevant codes.`;
+{"codes":["CODE1","CODE2","CODE3"],"reasoning":"One sentence explanation"}
+Return up to 12 codes covering all subjects mentioned. Be generous — include any code that reasonably matches any part of the description.`;
 
     const result = await apiCall('claudeSuggest', { prompt });
 
@@ -3292,51 +3294,93 @@ Pick the 3-8 most relevant codes.`;
     if (!suggestedCodes.length) throw new Error('AI returned no valid codes');
 
   } catch(aiErr) {
-    // ── Keyword fallback ──
+    // ── Keyword fallback — also searches all subjects ──
     console.info('AI suggest fell back to keyword scoring:', aiErr.message);
     method = 'keyword';
     suggestedCodes = keywordSuggest(text, relevantCodes);
     reasoning = suggestedCodes.length
-      ? `Matched by keyword scoring (AI not configured — see console for setup instructions)`
+      ? 'Matched by keyword scoring across all subjects'
       : '';
   }
 
   // ── Render results ──
   if (!suggestedCodes.length) {
-    // Nothing from either method — show keyword debug info
-    const topScores = relevantCodes
-      .map(c => ({ code: c.Code, score: keywordScore(text, c.Descriptor||c.Aspect||''), desc: (c.Descriptor||'').slice(0,50) }))
-      .sort((a,b) => b.score - a.score).slice(0,3);
-    results.innerHTML = `<div style="font-size:11px;color:var(--text3)">
-      No strong matches found for "<em>${text}</em>".
-      <div style="margin-top:6px">Try being more specific, or use the search box below.</div>
-      ${topScores.length ? `<div style="margin-top:8px;font-size:10px;color:var(--text3)">Closest: ${topScores.map(x=>x.code).join(', ')}</div>` : ''}
-    </div>`;
+    // Show closest keyword matches as clickable buttons even when AI finds nothing
+    const closest = relevantCodes
+      .map(c => ({ code: c.Code, cd: c, score: keywordScore(text, c.Descriptor||c.Aspect||'') }))
+      .filter(x => x.score > 0)
+      .sort((a,b) => b.score - a.score)
+      .slice(0, 6);
+
+    if (closest.length) {
+      results.innerHTML = `
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+          No strong matches — showing closest results across all subjects. Click to add:
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          ${closest.map(({code, cd}) => {
+            const selected = dlState.selectedCodes.includes(code);
+            const subjColours = {'English':'var(--blue)','Mathematics':'var(--green)','Science':'var(--teal)','HASS':'var(--gold)'};
+            const col = selected ? 'var(--green)' : (subjColours[cd?.Subject] || 'var(--text3)');
+            return `<button onclick="dlAddAISuggested('${code}')" id="dl-ai-chip-${code}"
+              style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:5px;
+              border:1px solid ${col};background:${col}22;color:${col};
+              font-size:11px;cursor:pointer;transition:all 0.15s">
+              <span style="font-family:'DM Mono',monospace">${selected ? '✓' : '+'} ${code}</span>
+              <span style="font-size:10px;color:var(--text3)">${(cd?.Subject||'').slice(0,4).toUpperCase()}</span>
+            </button>`;
+          }).join('')}
+        </div>`;
+    } else {
+      results.innerHTML = `<div style="font-size:11px;color:var(--text3)">
+        No matches found. Try describing your lesson in more detail — include subject-specific terms
+        like "phonics", "multiplication", "narrative writing", "living things" etc.
+      </div>`;
+    }
   } else {
     const methodLabel = method === 'ai'
-      ? `<span style="color:var(--purple);font-size:10px">✦ AI</span>`
-      : `<span style="color:var(--text3);font-size:10px">⌕ Keyword match</span>`;
+      ? `<span style="color:var(--purple);font-size:10px;font-weight:600">✦ AI suggested · all subjects</span>`
+      : `<span style="color:var(--text3);font-size:10px">⌕ Keyword match · all subjects</span>`;
+
+    // Group suggested codes by subject for easier reading
+    const bySubject = {};
+    suggestedCodes.forEach(code => {
+      const cd = state.curriculumCodes.find(c => c.Code === code);
+      const subj = cd?.Subject || 'Other';
+      if (!bySubject[subj]) bySubject[subj] = [];
+      bySubject[subj].push({ code, cd });
+    });
+
+    const subjColours = {'English':'var(--blue)','Mathematics':'var(--green)','Science':'var(--teal)','HASS':'var(--gold)','Health and Physical Education':'var(--rust)','Design and Technologies':'var(--purple)','Digital Technologies':'var(--purple)'};
+
+    const groupedHtml = Object.entries(bySubject).map(([subj, items]) => {
+      const col = subjColours[subj] || 'var(--text2)';
+      return `<div style="margin-bottom:8px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:${col};text-transform:uppercase;letter-spacing:0.1em;margin-bottom:5px">${subj}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          ${items.map(({code, cd}) => {
+            const selected = dlState.selectedCodes.includes(code);
+            const btnCol = selected ? 'var(--green)' : col;
+            const btnBg  = selected ? 'var(--green-dim)' : btnCol + '22';
+            return `<button onclick="dlAddAISuggested('${code}')" id="dl-ai-chip-${code}"
+              style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:6px;
+              border:2px solid ${btnCol};background:${btnBg};color:${btnCol};
+              font-size:12px;cursor:pointer;transition:all 0.15s;font-weight:600">
+              <span style="font-family:'DM Mono',monospace">${selected ? '✓' : '+'} ${code}</span>
+              ${cd ? `<span style="font-size:10px;font-weight:400;color:var(--text3)">${(cd.Strand||'').slice(0,20)}</span>` : ''}
+            </button>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('');
+
     results.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         ${methodLabel}
         <span style="font-size:11px;color:var(--text3);font-style:italic;flex:1">${reasoning}</span>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px">
-        ${suggestedCodes.map(code => {
-          const cd = state.curriculumCodes.find(c => c.Code === code);
-          const selected = dlState.selectedCodes.includes(code);
-          const subjColours = {'English':'var(--blue)','Mathematics':'var(--green)','Science':'var(--teal)','HASS':'var(--gold)'};
-          const col = selected ? 'var(--green)' : (subjColours[cd?.Subject] || 'var(--purple)');
-          const bg  = selected ? 'var(--green-dim)' : col + '22';
-          return `<button onclick="dlAddAISuggested('${code}')" id="dl-ai-chip-${code}"
-            style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:5px;
-            border:1px solid ${col};background:${bg};color:${col};
-            font-size:11px;cursor:pointer;transition:all 0.15s">
-            <span style="font-family:'DM Mono',monospace">${selected ? '✓' : '+'} ${code}</span>
-            ${cd ? `<span style="font-size:10px;color:var(--text3)">${(cd.Strand||'').slice(0,22)}</span>` : ''}
-          </button>`;
-        }).join('')}
-      </div>`;
+      ${groupedHtml}
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">Click any code to add it to your selection ↑</div>`;
   }
 
   btn.textContent = 'Suggest'; btn.disabled = false;
@@ -3348,19 +3392,37 @@ function dlAddAISuggested(code) {
   } else {
     dlState.selectedCodes.splice(dlState.selectedCodes.indexOf(code), 1);
   }
-  // Update the chip button
+  const selected = dlState.selectedCodes.includes(code);
+
+  // Update the AI chip button appearance
   const chip = document.getElementById('dl-ai-chip-' + code);
   if (chip) {
-    const selected = dlState.selectedCodes.includes(code);
     chip.style.borderColor = selected ? 'var(--green)' : 'var(--purple)';
     chip.style.background  = selected ? 'var(--green-dim)' : 'var(--purple-dim)';
     chip.style.color       = selected ? 'var(--green)' : 'var(--purple)';
+    const span = chip.querySelector('span');
+    if (span) span.textContent = (selected ? '✓ ' : '+ ') + code;
   }
-  // Update selected chips row
+
+  // Update the selected chips row at top of code list
   const chips = document.getElementById('dl-selected-chips');
   if (chips) chips.innerHTML = buildDlSelectedChips();
+
+  // Update footer next button
   const btn = document.querySelector('#dl-overlay button[onclick="dlNext()"]');
   if (btn) btn.textContent = `Next → Quick Mastery (${dlState.selectedCodes.length} codes)`;
+
+  // Also highlight the row in the code list if it's visible
+  const row = document.querySelector(`[data-dl-code="${code}"]`);
+  if (row) {
+    row.style.background = selected ? 'var(--blue-dim)' : 'transparent';
+    const box = row.querySelector('div');
+    if (box) {
+      box.style.borderColor = selected ? 'var(--blue)' : 'var(--border2)';
+      box.style.background  = selected ? 'var(--blue)' : 'none';
+      box.innerHTML = selected ? '<span style="color:#0f1117;font-size:10px;font-weight:700">✓</span>' : '';
+    }
+  }
 }
 
 // ── STEP 3: QUICK MASTERY ──
