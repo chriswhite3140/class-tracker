@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version 1.0.3 -->
+<!-- Version 1.0.4 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -729,7 +729,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">P–6 · All Subjects</div>
-      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.3</div>
+      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.4</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -830,7 +830,7 @@ body {
  * ============================================================
  */
 
-const APP_VERSION = 'v1.0.3';
+const APP_VERSION = 'v1.0.4';
 
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
@@ -3175,7 +3175,63 @@ function dlFilterCodes() {
   if (count) count.textContent = `Showing ${filtered.length} codes${filtered.length === 150 ? ' (use filters to narrow)' : ''}`;
 }
 
-// ── AI SUGGESTER ──
+// ── KEYWORD SCORER (fallback — works with no API key) ──
+// Expands common teaching synonyms so "doubling" matches "multiplication facts for twos" etc.
+const SYNONYM_MAP = {
+  'doubling':'multiplication', 'halving':'division', 'times tables':'multiplication',
+  'timestables':'multiplication', 'timetables':'multiplication', 'timestabls':'multiplication',
+  'number facts':'multiplication', 'addition facts':'addition', 'subtraction facts':'subtraction',
+  'place value':'place', 'number sense':'number', 'counting on':'counting',
+  'phonics':'phonemic', 'phonemic awareness':'phonemic', 'blending':'blend',
+  'segmenting':'segment', 'decoding':'decode', 'sight words':'sight', 'high frequency':'sight',
+  'narratives':'narrative', 'recounts':'recount', 'reports':'report', 'procedures':'procedure',
+  'sentence types':'sentence', 'question marks':'punctuation', 'full stops':'punctuation',
+  'capital letters':'capitalisation', 'speech marks':'punctuation', 'paragraphs':'paragraph',
+  'character':'character', 'setting':'setting', 'plot':'plot',
+  'fractions':'fraction', 'decimals':'decimal', 'percentages':'percentage',
+  'measurement':'measure', 'length':'length', 'area':'area', 'volume':'volume',
+  'data':'data', 'graphs':'graph', 'chance':'probability', 'probability':'probability',
+  'living things':'living', 'materials':'material', 'forces':'force', 'energy':'energy',
+  'geography':'geography', 'history':'history', 'civics':'civics',
+};
+
+function keywordScore(lessonText, descriptor) {
+  // Normalise and expand synonyms
+  let text = lessonText.toLowerCase();
+  Object.entries(SYNONYM_MAP).forEach(([alias, canonical]) => {
+    text = text.replace(new RegExp(alias, 'g'), canonical);
+  });
+
+  const textWords = new Set(
+    text.split(/\W+/).filter(w => w.length > 2 &&
+      !['the','and','for','with','are','was','that','this','they','have',
+        'from','been','each','will','when','what','how','but','not','can',
+        'its','their','about','into','also','using','which','through'].includes(w))
+  );
+
+  let desc = (descriptor || '').toLowerCase();
+  Object.entries(SYNONYM_MAP).forEach(([alias, canonical]) => {
+    desc = desc.replace(new RegExp(alias, 'g'), canonical);
+  });
+  const descWords = desc.split(/\W+/).filter(w => w.length > 2);
+
+  let score = 0;
+  descWords.forEach(w => { if (textWords.has(w)) score++; });
+  // Bonus for longer matches (phrase-level)
+  textWords.forEach(tw => { if (desc.includes(tw) && tw.length > 4) score += 0.5; });
+  return score;
+}
+
+function keywordSuggest(lessonText, codes) {
+  const scored = codes
+    .map(c => ({ code: c.Code, score: keywordScore(lessonText, c.Descriptor || c.Aspect || '') }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+  return scored.map(x => x.code);
+}
+
+// ── AI SUGGESTER (with keyword fallback) ──
 async function dlAISuggest() {
   const input   = document.getElementById('dl-ai-input');
   const btn     = document.getElementById('dl-ai-btn');
@@ -3184,85 +3240,105 @@ async function dlAISuggest() {
   if (!text) { toast('Describe what you taught first', 'error'); return; }
 
   btn.textContent = '…'; btn.disabled = true;
-  results.innerHTML = `<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Analysing lesson…</div>`;
+  results.innerHTML = `<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:8px">
+    <div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Analysing lesson…
+  </div>`;
 
-  // Use currently filtered subject/year for relevance
+  // Scope to current subject/year filter for relevance
   const subj = document.getElementById('dl-subj-filter')?.value || 'all';
   const year = document.getElementById('dl-year-filter')?.value || 'all';
-
   const relevantCodes = state.curriculumCodes.filter(c => {
     if (subj !== 'all' && c.Subject !== subj) return false;
     if (year !== 'all' && (c['Year Level']||'').trim() !== year) return false;
     return true;
   }).slice(0, 500);
 
-  const codeList = relevantCodes.map(c =>
-    `${c.Code}|${c.Subject}|${c.Strand||''}|${(c.Descriptor||c.Aspect||'').slice(0,90)}`
-  ).join('\n');
+  if (!relevantCodes.length) {
+    results.innerHTML = `<div style="font-size:11px;color:var(--text3)">No codes in scope — try changing the subject or year filter first.</div>`;
+    btn.textContent = 'Suggest'; btn.disabled = false;
+    return;
+  }
 
-  const yearContext = year !== 'all' ? ` for ${year}` : '';
-  const prompt = `You are helping an Australian primary school teacher identify curriculum codes${yearContext}.
+  let suggestedCodes = [];
+  let reasoning = '';
+  let method = 'ai'; // track which path succeeded
 
+  // ── Try AI via Apps Script first ──
+  try {
+    const yearContext = year !== 'all' ? ` for ${year}` : '';
+    const codeList = relevantCodes.map(c =>
+      `${c.Code}|${c.Subject}|${c.Strand||''}|${(c.Descriptor||c.Aspect||'').slice(0,90)}`
+    ).join('\n');
+
+    const prompt = `You are helping an Australian primary school teacher identify Australian Curriculum v9 codes${yearContext}.
 Lesson description: "${text}"
-
 Available codes (Code|Subject|Strand|Descriptor):
 ${codeList}
-
-Return ONLY valid JSON with no preamble or backticks:
-{"codes":["CODE1","CODE2","CODE3"],"reasoning":"One sentence explanation"}
-
+Return ONLY valid JSON, no preamble, no backticks:
+{"codes":["CODE1","CODE2"],"reasoning":"One sentence explanation"}
 Pick the 3-8 most relevant codes.`;
 
-  try {
-    // Route through Apps Script proxy — add claudeSuggest action to your Apps Script
     const result = await apiCall('claudeSuggest', { prompt });
 
-    let suggestedCodes = [];
-    let reasoning = '';
-
-    if (result && result.codes) {
-      // Apps Script returned parsed result
+    if (result && result.codes && result.codes.length) {
       suggestedCodes = result.codes.filter(code => state.curriculumCodes.some(c => c.Code === code));
       reasoning = result.reasoning || '';
     } else if (result && result.text) {
-      // Apps Script returned raw text — parse it
       const parsed = JSON.parse(result.text.replace(/```json|```/g,'').trim());
       suggestedCodes = (parsed.codes||[]).filter(code => state.curriculumCodes.some(c => c.Code === code));
       reasoning = parsed.reasoning || '';
-    } else {
-      throw new Error('No result from Apps Script');
     }
 
-    if (!suggestedCodes.length) {
-      results.innerHTML = `<div style="font-size:11px;color:var(--text3)">No matching codes found — try rephrasing or use the filters below.</div>`;
-    } else {
-      results.innerHTML = `
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;font-style:italic">${reasoning}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:5px">
-          ${suggestedCodes.map(code => {
-            const cd = state.curriculumCodes.find(c => c.Code === code);
-            const selected = dlState.selectedCodes.includes(code);
-            return `<button onclick="dlAddAISuggested('${code}')" id="dl-ai-chip-${code}"
-              style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:5px;
-              border:1px solid ${selected?'var(--green)':'var(--purple)'};
-              background:${selected?'var(--green-dim)':'var(--purple-dim)'};
-              color:${selected?'var(--green)':'var(--purple)'};
-              font-size:11px;cursor:pointer;transition:all 0.15s">
-              <span style="font-family:'DM Mono',monospace">${selected ? '✓' : '+'} ${code}</span>
-              ${cd ? `<span style="font-size:10px;color:var(--text3)">${(cd.Strand||'').slice(0,22)}</span>` : ''}
-            </button>`;
-          }).join('')}
-        </div>`;
-    }
-  } catch(e) {
-    console.error('AI suggest error:', e);
-    results.innerHTML = `<div style="font-size:11px;color:var(--rust)">
-      AI suggestion unavailable — use search and filters below.
-      <span style="color:var(--text3);display:block;margin-top:4px;font-size:10px">
-        (Add <code style="background:var(--surface2);padding:1px 4px;border-radius:3px">claudeSuggest</code> action to your Apps Script to enable AI suggestions)
-      </span>
-    </div>`;
+    if (!suggestedCodes.length) throw new Error('AI returned no valid codes');
+
+  } catch(aiErr) {
+    // ── Keyword fallback ──
+    console.info('AI suggest fell back to keyword scoring:', aiErr.message);
+    method = 'keyword';
+    suggestedCodes = keywordSuggest(text, relevantCodes);
+    reasoning = suggestedCodes.length
+      ? `Matched by keyword scoring (AI not configured — see console for setup instructions)`
+      : '';
   }
+
+  // ── Render results ──
+  if (!suggestedCodes.length) {
+    // Nothing from either method — show keyword debug info
+    const topScores = relevantCodes
+      .map(c => ({ code: c.Code, score: keywordScore(text, c.Descriptor||c.Aspect||''), desc: (c.Descriptor||'').slice(0,50) }))
+      .sort((a,b) => b.score - a.score).slice(0,3);
+    results.innerHTML = `<div style="font-size:11px;color:var(--text3)">
+      No strong matches found for "<em>${text}</em>".
+      <div style="margin-top:6px">Try being more specific, or use the search box below.</div>
+      ${topScores.length ? `<div style="margin-top:8px;font-size:10px;color:var(--text3)">Closest: ${topScores.map(x=>x.code).join(', ')}</div>` : ''}
+    </div>`;
+  } else {
+    const methodLabel = method === 'ai'
+      ? `<span style="color:var(--purple);font-size:10px">✦ AI</span>`
+      : `<span style="color:var(--text3);font-size:10px">⌕ Keyword match</span>`;
+    results.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        ${methodLabel}
+        <span style="font-size:11px;color:var(--text3);font-style:italic;flex:1">${reasoning}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        ${suggestedCodes.map(code => {
+          const cd = state.curriculumCodes.find(c => c.Code === code);
+          const selected = dlState.selectedCodes.includes(code);
+          const subjColours = {'English':'var(--blue)','Mathematics':'var(--green)','Science':'var(--teal)','HASS':'var(--gold)'};
+          const col = selected ? 'var(--green)' : (subjColours[cd?.Subject] || 'var(--purple)');
+          const bg  = selected ? 'var(--green-dim)' : col + '22';
+          return `<button onclick="dlAddAISuggested('${code}')" id="dl-ai-chip-${code}"
+            style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:5px;
+            border:1px solid ${col};background:${bg};color:${col};
+            font-size:11px;cursor:pointer;transition:all 0.15s">
+            <span style="font-family:'DM Mono',monospace">${selected ? '✓' : '+'} ${code}</span>
+            ${cd ? `<span style="font-size:10px;color:var(--text3)">${(cd.Strand||'').slice(0,22)}</span>` : ''}
+          </button>`;
+        }).join('')}
+      </div>`;
+  }
+
   btn.textContent = 'Suggest'; btn.disabled = false;
 }
 
