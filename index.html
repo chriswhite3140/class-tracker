@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version 1.0.8 -->
+<!-- Version 1.1.0 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -729,7 +729,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">P–6 · All Subjects</div>
-      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.8</div>
+      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.1.0</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -830,7 +830,7 @@ body {
  * ============================================================
  */
 
-const APP_VERSION = 'v1.0.8';
+const APP_VERSION = 'v1.1.0';
 
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
@@ -2870,8 +2870,13 @@ function renderDlModal() {
     : dlState.step === 2 ? `Next → Quick Mastery (${dlState.selectedCodes.length} codes)`
     : `✓ Save Session`;
 
+  // Modal width: step 3 gets much wider to fit the mastery grid
+  const modalWidth = dlState.step === 3
+    ? 'width:min(95vw,1100px)'
+    : 'width:min(96vw,680px)';
+
   overlay.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;width:640px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,0.5);animation:slideUp 0.2s ease">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;${modalWidth};max-height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,0.5);animation:slideUp 0.2s ease">
       <!-- Header -->
       <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -3473,28 +3478,38 @@ function buildDlStep3() {
     const cd = state.curriculumCodes.find(c => c.Code === code);
     const col = subjColours[cd?.Subject] || 'var(--blue)';
     const descriptor = cd ? (cd.Descriptor || cd.Aspect || '') : '';
-    return `<th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);min-width:180px;vertical-align:top;border-left:1px solid var(--border)">
-      <!-- Code + subject tag -->
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-        <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${col}">${code}</span>
-        ${cd?.Subject ? `<span style="font-size:8px;background:${col}22;color:${col};padding:1px 5px;border-radius:3px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.05em">${cd.Subject.slice(0,4)}</span>` : ''}
-        ${cd?.Strand ? `<span style="font-size:8px;color:var(--text3)">${cd.Strand}</span>` : ''}
-      </div>
-      <!-- Full descriptor -->
-      <div style="font-size:10px;color:var(--text2);line-height:1.4;margin-bottom:8px;font-weight:400;font-family:'Instrument Sans',sans-serif">${descriptor}</div>
-      <!-- Mark all buttons -->
-      <div style="display:flex;flex-direction:column;gap:3px">
-        ${['Achieved','Developing','Emerging'].map(m => {
-          const {col: mc, bg} = masteryColours[m];
-          return `<button onclick="dlMarkAllForCode('${code}','${m}')"
-            style="padding:2px 6px;border-radius:3px;border:1px solid ${mc};background:${bg};color:${mc};font-size:9px;cursor:pointer;white-space:nowrap">
-            All ${m.slice(0,3)}
-          </button>`;
-        }).join('')}
-        <button onclick="dlMarkAllForCode('${code}',null)"
-          style="padding:2px 6px;border-radius:3px;border:1px solid var(--border2);background:none;color:var(--text3);font-size:9px;cursor:pointer">
-          Clear
-        </button>
+    return `<th style="padding:0;text-align:left;border-bottom:1px solid var(--border);min-width:180px;max-width:240px;vertical-align:bottom;border-left:1px solid var(--border)">
+      <div style="display:flex;flex-direction:column;height:100%;padding:10px 12px;min-height:140px">
+        <!-- Code + subject tag -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+          <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${col}">${code}</span>
+          ${cd?.Subject ? `<span style="font-size:8px;background:${col}22;color:${col};padding:1px 5px;border-radius:3px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.05em">${cd.Subject.slice(0,4)}</span>` : ''}
+          ${cd?.Strand ? `<span style="font-size:8px;color:var(--text3)">${cd.Strand}</span>` : ''}
+        </div>
+        <!-- Full descriptor — grows to fill space -->
+        <div style="font-size:10px;color:var(--text2);line-height:1.4;flex:1;font-weight:400;font-family:'Instrument Sans',sans-serif">${descriptor}</div>
+        <!-- Mark all buttons — always at bottom -->
+        <div style="display:flex;flex-direction:column;gap:3px;margin-top:8px">
+          ${[
+            {m:'Achieved',  dot:'●', label:'All Achieved'},
+            {m:'Developing',dot:'◐', label:'All Developing'},
+            {m:'Emerging',  dot:'○', label:'All Emerging'},
+          ].map(({m, dot, label}) => {
+            const {col: mc, bg} = masteryColours[m];
+            return `<button onclick="dlMarkAllForCode('${code}','${m}')"
+              style="padding:4px 8px;border-radius:4px;border:1px solid ${mc};background:${bg};color:${mc};
+              font-size:10px;cursor:pointer;width:100%;display:flex;align-items:center;gap:6px;font-family:'Instrument Sans',sans-serif;font-weight:600">
+              <span style="font-size:12px;flex-shrink:0">${dot}</span>
+              <span>${label}</span>
+            </button>`;
+          }).join('')}
+          <button onclick="dlMarkAllForCode('${code}',null)"
+            style="padding:4px 8px;border-radius:4px;border:1px solid var(--border2);background:none;color:var(--text3);
+            font-size:10px;cursor:pointer;width:100%;display:flex;align-items:center;gap:6px;font-family:'Instrument Sans',sans-serif">
+            <span style="font-size:12px;flex-shrink:0">✕</span>
+            <span>Clear all</span>
+          </button>
+        </div>
       </div>
     </th>`;
   }).join('');
