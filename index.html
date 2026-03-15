@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version 1.0.7 -->
+<!-- Version 1.0.8 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -729,7 +729,7 @@ body {
     <div class="sidebar-logo">
       <div class="logo-name">ClassTracker</div>
       <div class="logo-sub">P–6 · All Subjects</div>
-      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.7</div>
+      <div id="sidebar-version" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text3);margin-top:4px;letter-spacing:0.1em">v1.0.8</div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Views</div>
@@ -830,7 +830,7 @@ body {
  * ============================================================
  */
 
-const APP_VERSION = 'v1.0.7';
+const APP_VERSION = 'v1.0.8';
 
 // ── CONFIG ──
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbS0mCTPLmcTDECGSmGbdK6Wd75lpinKDLs7wtvlKg-xo00IpZqNiQGF6RoR9Xpy2I/exec';
@@ -3467,16 +3467,27 @@ function buildDlStep3() {
   };
 
   // Build header: one column per code
+  const subjColours = {'English':'var(--blue)','Mathematics':'var(--green)','Science':'var(--teal)','HASS':'var(--gold)','Health and Physical Education':'var(--rust)','Design and Technologies':'var(--purple)','Digital Technologies':'var(--purple)'};
+
   const codeHeaders = codes.map(code => {
     const cd = state.curriculumCodes.find(c => c.Code === code);
-    return `<th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--border);min-width:110px;vertical-align:bottom">
-      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--blue);margin-bottom:3px">${code}</div>
-      <div style="font-size:9px;color:var(--text3);margin-bottom:6px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${cd?cd.Strand:''}">${cd ? (cd.Strand||'').slice(0,16) : ''}</div>
+    const col = subjColours[cd?.Subject] || 'var(--blue)';
+    const descriptor = cd ? (cd.Descriptor || cd.Aspect || '') : '';
+    return `<th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);min-width:180px;vertical-align:top;border-left:1px solid var(--border)">
+      <!-- Code + subject tag -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+        <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:${col}">${code}</span>
+        ${cd?.Subject ? `<span style="font-size:8px;background:${col}22;color:${col};padding:1px 5px;border-radius:3px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.05em">${cd.Subject.slice(0,4)}</span>` : ''}
+        ${cd?.Strand ? `<span style="font-size:8px;color:var(--text3)">${cd.Strand}</span>` : ''}
+      </div>
+      <!-- Full descriptor -->
+      <div style="font-size:10px;color:var(--text2);line-height:1.4;margin-bottom:8px;font-weight:400;font-family:'Instrument Sans',sans-serif">${descriptor}</div>
+      <!-- Mark all buttons -->
       <div style="display:flex;flex-direction:column;gap:3px">
         ${['Achieved','Developing','Emerging'].map(m => {
-          const {col,bg} = masteryColours[m];
+          const {col: mc, bg} = masteryColours[m];
           return `<button onclick="dlMarkAllForCode('${code}','${m}')"
-            style="padding:2px 6px;border-radius:3px;border:1px solid ${col};background:${bg};color:${col};font-size:9px;cursor:pointer;white-space:nowrap">
+            style="padding:2px 6px;border-radius:3px;border:1px solid ${mc};background:${bg};color:${mc};font-size:9px;cursor:pointer;white-space:nowrap">
             All ${m.slice(0,3)}
           </button>`;
         }).join('')}
@@ -3523,10 +3534,10 @@ function buildDlStep3() {
       Optionally set mastery for each student × code. Tap a dot to select — <span style="color:var(--green)">●</span> Achieved &nbsp;<span style="color:var(--gold)">◐</span> Developing &nbsp;<span style="color:var(--rust)">○</span> Emerging. Leave blank to skip.
     </div>
     <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px">
-      <table style="width:100%;border-collapse:collapse;min-width:${200 + codes.length * 120}px">
+      <table style="width:100%;border-collapse:collapse;min-width:${200 + codes.length * 200}px">
         <thead>
           <tr style="background:var(--surface2)">
-            <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border);position:sticky;left:0;background:var(--surface2);font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;min-width:160px">Student</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);position:sticky;left:0;background:var(--surface2);font-family:'DM Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;min-width:160px;vertical-align:bottom">Student</th>
             ${codeHeaders}
           </tr>
         </thead>
